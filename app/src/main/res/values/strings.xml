@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">Netra Battery</string>
+    <string name="channel_status_name">Guardian Monitor</string>
+    <string name="channel_status_desc">Ongoing status when Live Guardian or Trip Mode is active</string>
+    <string name="channel_advisory_name">Charging &amp; Storage Advisories</string>
+    <string name="channel_advisory_desc">Charging alerts, background drain summaries, and storage tips</string>
+    <string name="channel_critical_name">Thermal &amp; Low Battery Alerts</string>
+    <string name="channel_critical_desc">Urgent overheating and critical low-battery safety notifications</string>
+</resources>

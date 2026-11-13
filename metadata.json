@@ -1,0 +1,6 @@
+{
+  "name": "Netra Battery",
+  "description": "Netra Battery Guardian — Offline Battery, Heat & Storage Manager. 100% private on-device battery health, charging voice assistant, thermal diagnosis, and storage insights.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
