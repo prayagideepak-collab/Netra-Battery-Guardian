@@ -69,10 +69,6 @@ class BatteryMonitoringService : Service() {
   @Inject lateinit var thermalMonitor: ThermalMonitor
   @Inject lateinit var dozeModeMonitor: DozeModeMonitor
   @Inject lateinit var batteryLifecycleEstimator: BatteryLifecycleEstimator
-  @Inject lateinit var dozeModeMonitor: DozeModeMonitor
-  @Inject lateinit var batteryLifecycleEstimator: BatteryLifecycleEstimator
-  @Inject lateinit var dozeModeMonitor: DozeModeMonitor
-  @Inject lateinit var batteryLifecycleEstimator: BatteryLifecycleEstimator
 
   private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
   private var receiverRegistered = false
@@ -93,8 +89,6 @@ class BatteryMonitoringService : Service() {
     _serviceState.update { it.copy(isRunning = true) }
     notificationHelper.createChannels()
     thermalMonitor.register(ThermalMonitor.OWNER_MONITORING_SERVICE)
-    dozeModeMonitor.register(DozeModeMonitor.OWNER_MONITORING_SERVICE)
-    dozeModeMonitor.register(DozeModeMonitor.OWNER_MONITORING_SERVICE)
     dozeModeMonitor.register(DozeModeMonitor.OWNER_MONITORING_SERVICE)
     startForegroundCompat(
       title = "Netra Battery Monitor",

@@ -14,7 +14,6 @@ import com.example.domain.model.LogCategory
 import com.example.domain.model.LogSeverity
 import com.example.domain.model.TemperatureZone
 import com.example.service.DozeModeMonitor
-import com.example.service.DozeModeMonitor
 import com.example.service.NotificationHelper
 import com.example.voice.ChargingVoiceAssistant
 import kotlinx.coroutines.sync.Mutex

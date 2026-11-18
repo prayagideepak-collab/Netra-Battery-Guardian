@@ -70,19 +70,3 @@ data class BatteryHealthLogEntity(
   val healthPercent: Float,
   val sourceLabel: String,
 )
-
-@Entity(
-  tableName = "battery_health_logs",
-  indices = [Index(value = ["dayBucket"], unique = true), Index(value = ["timestampMillis"])],
-)
-data class BatteryHealthLogEntity(
-  @PrimaryKey(autoGenerate = true) val id: Long = 0,
-  val dayBucket: Long,
-  val timestampMillis: Long,
-  val estimatedCycleCount: Float,
-  val designCapacityMah: Int,
-  val estimatedCapacityMah: Int,
-  val degradationPercent: Float,
-  val healthPercent: Float,
-  val sourceLabel: String,
-)
