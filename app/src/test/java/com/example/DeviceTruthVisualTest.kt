@@ -43,6 +43,7 @@ class DeviceTruthVisualTest {
     } } }
     rule.onNodeWithTag("sentinel_battery_capacity_value").assertDoesNotExist()
     rule.onNodeWithTag("sentinel_temperature_status_badge").assertDoesNotExist()
+    rule.onAllNodesWithText("DISCHARGING").assertCountEquals(0)
     rule.onAllNodesWithText("4500",substring=true).assertCountEquals(0)
     capture("truth-missing-dashboard")
   }

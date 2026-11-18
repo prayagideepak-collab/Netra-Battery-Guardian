@@ -367,7 +367,7 @@ fun BatteryMonitoringDashboardView(
           isCharging = telemetry.isCharging,
           temperatureCelsius = telemetry.temperatureCelsius,
           animateRing = true,
-          statusLabel = if (telemetry.isCharging) "CHARGING" else "DISCHARGING",
+          statusLabel = if (!telemetry.hasLevel) "" else if (telemetry.isCharging) "CHARGING" else "DISCHARGING",
           modifier = Modifier
             .size(152.dp)
             .testTag("sentinel_circular_battery_indicator"),
@@ -459,7 +459,7 @@ fun BatteryMonitoringDashboardView(
             maxT,
           )
         } else if (finiteTempHistory.size == 1) {
-          String.format(Locale.US, "0.0°C (Baseline %.1f°C)", finiteTempHistory.first())
+          ""
         } else {
           "Unavailable"
         }
@@ -545,7 +545,7 @@ fun BatteryMonitoringDashboardView(
           val spreadMv = maxMv - minMv
           "Δ $spreadMv mV (Min $minMv mV • Max $maxMv mV)"
         } else if (finiteVoltageHistoryMv.size == 1) {
-          "Δ 0 mV (Stable at ${finiteVoltageHistoryMv.first()} mV)"
+          ""
         } else {
           "Unavailable"
         }
@@ -611,7 +611,7 @@ fun BatteryMonitoringDashboardView(
               fontWeight = FontWeight.SemiBold,
             )
             Text(
-              text = if (isHindi) "चार्जिंग आवक बनाम डिस्चार्ज खपत" else "Incoming Charging vs Outgoing Consumption",
+              text = if (isHindi) "चार्जिंग आवक बनाम डिस्चार्ज खपत" else "Signed Android battery sensor reading",
               style = MaterialTheme.typography.labelSmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

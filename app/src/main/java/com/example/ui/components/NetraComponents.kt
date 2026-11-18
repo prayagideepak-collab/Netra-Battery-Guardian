@@ -318,6 +318,7 @@ fun StatusPill(
   color: Color,
   modifier: Modifier = Modifier,
 ) {
+  if (text.isBlank() || text.contains("Unavailable", ignoreCase = true) || text.contains("अनुपलब्ध")) return
   Surface(
     modifier = modifier.semantics(mergeDescendants = true) {},
     shape = RoundedCornerShape(999.dp),
