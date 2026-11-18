@@ -1,5 +1,6 @@
 package com.example.data.local.system
 
+import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -10,8 +11,10 @@ import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import com.example.domain.model.AppStandbyBucket
 import com.example.domain.model.BatteryHealthState
 import com.example.domain.model.BatteryTelemetry
+import com.example.domain.model.NetworkType
 import com.example.domain.model.PlugType
 import com.example.domain.model.ThermalLevel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -33,6 +36,7 @@ class BatteryTelemetryCollector @Inject constructor(
   fun collect(
     intentOverride: Intent? = null,
     observedCapacityFallbackMah: Int = 4500,
+    isAppInForeground: Boolean = true,
   ): BatteryTelemetry {
     val intent =
       intentOverride
@@ -144,6 +148,8 @@ class BatteryTelemetryCollector @Inject constructor(
     val hotspotLikelyActive = detectHotspotLikelyActive()
     val isMetered = connectivityManager?.isActiveNetworkMetered ?: false
     val poorCellularSignal = detectWeakCellularSignal()
+    val networkType = detectNetworkType()
+    val standbyBucket = detectStandbyBucket()
 
     return BatteryTelemetry(
       timestampMillis = System.currentTimeMillis(),
@@ -166,8 +172,41 @@ class BatteryTelemetryCollector @Inject constructor(
       hotspotLikelyActive = hotspotLikelyActive,
       poorCellularSignal = poorCellularSignal,
       isNetworkMetered = isMetered,
+      networkType = networkType,
+      standbyBucket = standbyBucket,
+      isAppInForeground = isAppInForeground,
       chargeCycleCount = cycleCount,
     )
+  }
+
+  private fun detectNetworkType(): NetworkType {
+    return runCatching {
+      val cm = connectivityManager ?: return NetworkType.NONE
+      val net = cm.activeNetwork ?: return NetworkType.NONE
+      val caps = cm.getNetworkCapabilities(net) ?: return NetworkType.NONE
+      when {
+        caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
+          caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) -> NetworkType.UNMETERED_WIFI
+        caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> NetworkType.METERED_CELLULAR
+        else -> NetworkType.OTHER
+      }
+    }.getOrDefault(NetworkType.NONE)
+  }
+
+  private fun detectStandbyBucket(): AppStandbyBucket {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return AppStandbyBucket.UNKNOWN
+    return runCatching {
+      val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
+        ?: return AppStandbyBucket.UNKNOWN
+      when (usm.appStandbyBucket) {
+        UsageStatsManager.STANDBY_BUCKET_ACTIVE -> AppStandbyBucket.ACTIVE
+        UsageStatsManager.STANDBY_BUCKET_WORKING_SET -> AppStandbyBucket.WORKING_SET
+        UsageStatsManager.STANDBY_BUCKET_FREQUENT -> AppStandbyBucket.FREQUENT
+        UsageStatsManager.STANDBY_BUCKET_RARE -> AppStandbyBucket.RARE
+        UsageStatsManager.STANDBY_BUCKET_RESTRICTED -> AppStandbyBucket.RESTRICTED
+        else -> AppStandbyBucket.UNKNOWN
+      }
+    }.getOrDefault(AppStandbyBucket.UNKNOWN)
   }
 
   private fun detectHotspotLikelyActive(): Boolean {

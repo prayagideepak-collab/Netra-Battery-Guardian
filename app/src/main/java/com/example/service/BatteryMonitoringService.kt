@@ -10,13 +10,15 @@ import android.content.pm.ServiceInfo
 import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
-import com.example.data.local.db.BatteryDatabase
+import com.example.data.local.db.AppDatabase
 import com.example.data.local.db.BatterySnapshot
 import com.example.data.local.prefs.PreferencesRepository
 import com.example.data.local.system.AppPowerInspector
 import com.example.data.local.system.BatteryTelemetryCollector
+import com.example.domain.engine.AdaptivePowerTierEngine
 import com.example.domain.engine.AutomationRulesEngine
 import com.example.domain.engine.ChargingSpeedClassifier
+import com.example.domain.engine.SelfHealingSupervisor
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,11 +37,13 @@ import javax.inject.Inject
 class BatteryMonitoringService : Service() {
 
   @Inject lateinit var notificationHelper: NotificationHelper
-  @Inject lateinit var batteryDatabase: BatteryDatabase
+  @Inject lateinit var appDatabase: AppDatabase
   @Inject lateinit var telemetryCollector: BatteryTelemetryCollector
   @Inject lateinit var appPowerInspector: AppPowerInspector
   @Inject lateinit var rulesEngine: AutomationRulesEngine
   @Inject lateinit var chargingClassifier: ChargingSpeedClassifier
+  @Inject lateinit var adaptivePowerTierEngine: AdaptivePowerTierEngine
+  @Inject lateinit var selfHealingSupervisor: SelfHealingSupervisor
   @Inject lateinit var preferencesRepository: PreferencesRepository
 
   private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -67,6 +71,9 @@ class BatteryMonitoringService : Service() {
     // Capture initial sticky broadcast immediately on startup
     val stickyIntent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
     handleBatteryChanged(stickyIntent)
+    serviceScope.launch {
+      selfHealingSupervisor.runNaturalHealthCheck(triggerSource = "battery_monitoring_service_start")
+    }
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -97,9 +104,20 @@ class BatteryMonitoringService : Service() {
   private fun handleBatteryChanged(intent: Intent?) {
     serviceScope.launch {
       val prefs = preferencesRepository.preferences.first()
-      val telemetry = telemetryCollector.collect(intent, prefs.observedCapacityMah)
+      val telemetry = telemetryCollector.collect(
+        intentOverride = intent,
+        observedCapacityFallbackMah = prefs.observedCapacityMah,
+        isAppInForeground = false,
+      )
+      val tierMetrics = adaptivePowerTierEngine.evaluate(telemetry, wakeupsThisHour = 0, snapshotsToday = 0)
       val topApps = if (appPowerInspector.hasUsageStatsPermission()) appPowerInspector.collectTopApps(5) else emptyList()
-      val eval = rulesEngine.evaluate(telemetry, prefs, topApps, forceSnapshot = false)
+      val eval = rulesEngine.evaluate(
+        telemetry = telemetry,
+        prefs = prefs,
+        topApps = topApps,
+        forceSnapshot = false,
+        dbBatchIntervalSeconds = tierMetrics.dbBatchIntervalSeconds,
+      )
       val diag = chargingClassifier.diagnose(telemetry)
 
       val statusCode = intent?.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN)
@@ -113,8 +131,8 @@ class BatteryMonitoringService : Service() {
           else -> "UNKNOWN"
         }
 
-      val snapshotDao = batteryDatabase.batterySnapshotDao()
-      val lastHourly = snapshotDao.getLatestHourlySnapshot()
+      val batteryDao = appDatabase.batteryDao()
+      val lastHourly = batteryDao.getLatestHourlySnapshot()
       val now = telemetry.timestampMillis
       val oneHourMillis = 3_600_000L
 
@@ -126,7 +144,7 @@ class BatteryMonitoringService : Service() {
             ?.let { if (kotlin.math.abs(it) > 25_000) it / 1000f else it.toFloat() }
             ?: telemetry.currentMa
 
-        snapshotDao.insertSnapshot(
+        batteryDao.insertSnapshot(
           BatterySnapshot(
             timestampMillis = now,
             levelPercent = telemetry.levelPercent,

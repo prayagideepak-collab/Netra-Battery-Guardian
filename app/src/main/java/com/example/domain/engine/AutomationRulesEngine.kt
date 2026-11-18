@@ -54,6 +54,7 @@ class AutomationRulesEngine @Inject constructor(
     prefs: UserPreferences,
     topApps: List<AppPowerInsight>,
     forceSnapshot: Boolean = false,
+    dbBatchIntervalSeconds: Int = 60,
   ): RuleEvaluationOutput = evalMutex.withLock {
     chargingClassifier.recordSample(telemetry)
     temperatureEngine.recordTemperature(telemetry.timestampMillis, telemetry.temperatureCelsius)
@@ -310,8 +311,9 @@ class AutomationRulesEngine @Inject constructor(
       }
     }
 
-    // 8. Persist snapshot periodically (every >= 60s or forced on significant change)
-    if (forceSnapshot || now - lastSnapshotSavedMillis >= 60_000L) {
+    // 8. Persist snapshot batched according to Adaptive Power Tier interval
+    val minIntervalMillis = dbBatchIntervalSeconds.coerceAtLeast(60) * 1000L
+    if (forceSnapshot || now - lastSnapshotSavedMillis >= minIntervalMillis) {
       lastSnapshotSavedMillis = now
       historyRepository.recordSnapshot(telemetry, activeProfile)
     }

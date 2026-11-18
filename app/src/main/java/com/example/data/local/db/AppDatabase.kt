@@ -15,19 +15,19 @@ import androidx.room.RoomDatabase
   version = 1,
   exportSchema = false,
 )
-abstract class BatteryDatabase : RoomDatabase() {
-  abstract fun batterySnapshotDao(): BatterySnapshotDao
+abstract class AppDatabase : RoomDatabase() {
+  abstract fun batteryDao(): BatteryDao
   abstract fun netraDao(): NetraDao
 
   companion object {
     @Volatile
-    private var INSTANCE: BatteryDatabase? = null
+    private var INSTANCE: AppDatabase? = null
 
-    fun getInstance(context: Context): BatteryDatabase {
+    fun getInstance(context: Context): AppDatabase {
       return INSTANCE ?: synchronized(this) {
         INSTANCE ?: Room.databaseBuilder(
           context.applicationContext,
-          BatteryDatabase::class.java,
+          AppDatabase::class.java,
           "battery_guardian.db",
         )
           .fallbackToDestructiveMigration(dropAllTables = false)

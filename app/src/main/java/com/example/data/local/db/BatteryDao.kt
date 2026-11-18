@@ -7,7 +7,7 @@ import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
 
 @Dao
-interface BatterySnapshotDao {
+interface BatteryDao {
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun insertSnapshot(snapshot: BatterySnapshot): Long
 
@@ -25,4 +25,7 @@ interface BatterySnapshotDao {
 
   @Query("DELETE FROM battery_snapshots WHERE timestampMillis < :cutoffMillis")
   suspend fun deleteSnapshotsOlderThan(cutoffMillis: Long)
+
+  @Query("DELETE FROM battery_snapshots")
+  suspend fun deleteAllSnapshots()
 }

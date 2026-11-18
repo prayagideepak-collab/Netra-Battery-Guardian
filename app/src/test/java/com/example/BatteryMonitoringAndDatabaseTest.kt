@@ -6,7 +6,7 @@ import android.content.IntentFilter
 import android.os.BatteryManager
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
-import com.example.data.local.db.BatteryDatabase
+import com.example.data.local.db.AppDatabase
 import com.example.data.local.db.BatterySnapshot
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -26,12 +26,12 @@ import org.robolectric.annotation.Config
 @Config(sdk = [36])
 class BatteryMonitoringAndDatabaseTest {
 
-  private lateinit var db: BatteryDatabase
+  private lateinit var db: AppDatabase
 
   @Before
   fun setup() {
     val context = ApplicationProvider.getApplicationContext<Context>()
-    db = Room.inMemoryDatabaseBuilder(context, BatteryDatabase::class.java)
+    db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
       .allowMainThreadQueries()
       .build()
   }
@@ -42,8 +42,8 @@ class BatteryMonitoringAndDatabaseTest {
   }
 
   @Test
-  fun `BatteryDatabase stores and queries hourly BatterySnapshot metrics`() = runBlocking {
-    val dao = db.batterySnapshotDao()
+  fun `AppDatabase and BatteryDao store and query hourly BatterySnapshot metrics`() = runBlocking {
+    val dao = db.batteryDao()
     val now = 1_700_000_000_000L
 
     dao.insertSnapshot(

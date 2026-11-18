@@ -1,8 +1,8 @@
 package com.example.data.repository
 
 import com.example.data.local.db.ActivityLogEntity
+import com.example.data.local.db.BatteryDao
 import com.example.data.local.db.BatterySnapshot
-import com.example.data.local.db.BatterySnapshotDao
 import com.example.data.local.db.ChargingSessionEntity
 import com.example.data.local.db.DischargeSessionEntity
 import com.example.data.local.db.NetraDao
@@ -18,7 +18,7 @@ import javax.inject.Singleton
 @Singleton
 class BatteryHistoryRepository @Inject constructor(
   private val dao: NetraDao,
-  private val snapshotDao: BatterySnapshotDao,
+  private val batteryDao: BatteryDao,
 ) {
   fun observe24HourSnapshots(nowMillis: Long = System.currentTimeMillis()): Flow<List<BatterySnapshot>> =
     dao.observeSnapshotsSince(nowMillis - 24L * 3600_000L)
@@ -27,7 +27,7 @@ class BatteryHistoryRepository @Inject constructor(
     dao.observeSnapshotsSince(nowMillis - 7L * 24L * 3600_000L)
 
   fun observeHourlySnapshots(): Flow<List<BatterySnapshot>> =
-    snapshotDao.observeHourlySnapshots()
+    batteryDao.observeHourlySnapshots()
 
   fun observeSnapshotsTodayCount(startOfDayMillis: Long): Flow<Int> =
     dao.observeSnapshotCountSince(startOfDayMillis)
@@ -45,7 +45,7 @@ class BatteryHistoryRepository @Inject constructor(
     activeProfile: GuardianProfile,
     isHourlyCheckpoint: Boolean = false,
   ) {
-    val latestHourly = snapshotDao.getLatestHourlySnapshot()
+    val latestHourly = batteryDao.getLatestHourlySnapshot()
     val shouldMarkHourly =
       isHourlyCheckpoint ||
         latestHourly == null ||

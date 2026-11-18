@@ -128,6 +128,47 @@ enum class LogSeverity {
   CRITICAL,
 }
 
+enum class NetworkType {
+  NONE,
+  UNMETERED_WIFI,
+  METERED_CELLULAR,
+  OTHER,
+}
+
+enum class AppStandbyBucket {
+  ACTIVE,
+  WORKING_SET,
+  FREQUENT,
+  RARE,
+  RESTRICTED,
+  UNKNOWN,
+}
+
+data class TierZeroItem(
+  val id: String,
+  val name: String,
+  val description: String,
+)
+
+data class FeaturePowerGate(
+  val featureName: String,
+  val runsInTier: String,
+  val maxWakeupsPerHour: Int,
+  val networkCallsPerHour: Int,
+  val measuredImpact: String,
+)
+
+data class SelfHealingStatus(
+  val circuitOpen: Boolean = false,
+  val consecutiveFailures: Int = 0,
+  val maxRetries: Int = 3,
+  val nextRetryAtMillis: Long = 0L,
+  val lastCheckMillis: Long = 0L,
+  val lastCheckSummary: String = "Healthy",
+  val rotatedLogBytes: Long = 0L,
+  val logCapBytes: Long = 256 * 1024L,
+)
+
 data class BatteryTelemetry(
   val timestampMillis: Long = System.currentTimeMillis(),
   val levelPercent: Int = 0,
@@ -149,6 +190,9 @@ data class BatteryTelemetry(
   val hotspotLikelyActive: Boolean = false,
   val poorCellularSignal: Boolean = false,
   val isNetworkMetered: Boolean = false,
+  val networkType: NetworkType = NetworkType.NONE,
+  val standbyBucket: AppStandbyBucket = AppStandbyBucket.ACTIVE,
+  val isAppInForeground: Boolean = true,
   val chargeCycleCount: Int? = null,
 ) {
   val voltageVolts: Float
@@ -269,4 +313,6 @@ data class PowerBudgetMetrics(
   val snapshotsRecordedToday: Int,
   val monitoringIntervalSeconds: Int,
   val isThermalThrottled: Boolean,
+  val dbBatchIntervalSeconds: Int = 60,
+  val suspendedFeatures: List<String> = emptyList(),
 )

@@ -14,6 +14,7 @@ import com.example.data.local.prefs.PreferencesRepository
 import com.example.data.local.system.BatteryTelemetryCollector
 import com.example.data.local.system.StorageInspector
 import com.example.data.repository.BatteryHistoryRepository
+import com.example.domain.engine.SelfHealingSupervisor
 import com.example.domain.model.LogCategory
 import com.example.domain.model.LogSeverity
 import dagger.assisted.Assisted
@@ -33,7 +34,10 @@ class BackgroundDrainCheckWorker @AssistedInject constructor(
 
   override suspend fun doWork(): Result {
     val prefs = preferencesRepository.preferences.first()
-    val telemetry = telemetryCollector.collect(observedCapacityFallbackMah = prefs.observedCapacityMah)
+    val telemetry = telemetryCollector.collect(
+      observedCapacityFallbackMah = prefs.observedCapacityMah,
+      isAppInForeground = false,
+    )
 
     // If screen turned on or charging started, no abnormal screen-off alert needed
     if (telemetry.screenOn || telemetry.isPlugged) return Result.success()
@@ -86,7 +90,10 @@ class StorageAuditWorker @AssistedInject constructor(
 
   override suspend fun doWork(): Result {
     val prefs = preferencesRepository.preferences.first()
-    val telemetry = telemetryCollector.collect(observedCapacityFallbackMah = prefs.observedCapacityMah)
+    val telemetry = telemetryCollector.collect(
+      observedCapacityFallbackMah = prefs.observedCapacityMah,
+      isAppInForeground = false,
+    )
 
     // Skip heavy storage work if hot >=40°C or battery <15%
     if (telemetry.temperatureCelsius >= 40f || telemetry.levelPercent < 15) {
@@ -149,10 +156,24 @@ class DataRetentionWorker @AssistedInject constructor(
   }
 }
 
+@HiltWorker
+class GuardianHealthCheckWorker @AssistedInject constructor(
+  @Assisted appContext: Context,
+  @Assisted params: WorkerParameters,
+  private val selfHealingSupervisor: SelfHealingSupervisor,
+) : CoroutineWorker(appContext, params) {
+
+  override suspend fun doWork(): Result {
+    selfHealingSupervisor.runNaturalHealthCheck(triggerSource = "workmanager_window")
+    return Result.success()
+  }
+}
+
 object NetraWorkScheduler {
   private const val WORK_STORAGE_AUDIT = "netra_storage_audit"
   private const val WORK_DATA_RETENTION = "netra_data_retention"
   private const val WORK_SCREEN_OFF_DRAIN = "netra_screen_off_drain"
+  private const val WORK_HEALTH_CHECK = "netra_health_check"
 
   fun schedulePeriodicMaintenance(context: Context) {
     val wm = WorkManager.getInstance(context)
@@ -188,6 +209,17 @@ object NetraWorkScheduler {
       WORK_DATA_RETENTION,
       ExistingPeriodicWorkPolicy.KEEP,
       retentionRequest,
+    )
+
+    val healthRequest =
+      PeriodicWorkRequestBuilder<GuardianHealthCheckWorker>(6, TimeUnit.HOURS)
+        .setConstraints(storageConstraints)
+        .build()
+
+    wm.enqueueUniquePeriodicWork(
+      WORK_HEALTH_CHECK,
+      ExistingPeriodicWorkPolicy.KEEP,
+      healthRequest,
     )
   }
 

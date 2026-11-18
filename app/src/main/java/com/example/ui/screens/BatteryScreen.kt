@@ -9,9 +9,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -21,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import com.example.domain.engine.PowerGovernanceRegistry
 import com.example.ui.NetraUiState
 import com.example.ui.components.GuardianCard
 import com.example.ui.components.StatusPill
@@ -42,6 +46,7 @@ fun BatteryScreen(
   modifier: Modifier = Modifier,
 ) {
   var show7Days by remember { mutableStateOf(false) }
+  var showGovernanceDialog by remember { mutableStateOf(false) }
   val snapshots = if (show7Days) state.snapshots7d else state.snapshots24h
   val dateFmt = remember { SimpleDateFormat("dd MMM HH:mm", Locale.getDefault()) }
   val t = state.telemetry
@@ -99,19 +104,54 @@ fun BatteryScreen(
       }
     }
 
-    // Power Budget Tier Card
+    // Power Budget Tier & 24/7 Self-Healing Card
     item {
       GuardianCard(modifier = Modifier.widthIn(max = 720.dp)) {
         val pb = state.powerBudget
+        val sh = state.selfHealingStatus
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text(
+            text = if (strings.isHindi) "अल्ट्रा-लो पावर बजट और 24/7 विश्वसनीयता" else "24/7 Power Budget & Self-Healing",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.weight(1f),
+          )
+          StatusPill(
+            text = "Tier: ${pb.activeTier.name}",
+            color = SemanticCoolMint,
+          )
+        }
         Text(
-          text = if (strings.isHindi) "अल्ट्रा-लो पावर बजट" else "Ultra-Low Power Budget",
-          style = MaterialTheme.typography.titleMedium,
+          text = "Idle target <= ${pb.activeTier.idleTargetDrainPer24hPercent}%/24h • Wakeups/hr: ${pb.wakeupsThisHour} (Cap <= ${pb.activeTier.maxWakeupsPerHour}) • Net/hr: 0 • DB Batch: ${pb.dbBatchIntervalSeconds}s",
+          style = TelemetryMonoStyle,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-          text = "Tier: ${pb.activeTier.name} | Wakeups/hr: ${pb.wakeupsThisHour} (Budget <= ${pb.activeTier.maxWakeupsPerHour}) | Network Calls/hr: ${pb.networkCallsThisHour} | Snapshots today: ${pb.snapshotsRecordedToday}",
+          text = "Inputs: ${t.levelPercent}% | Plug:${t.isPlugged} | OS Saver:${t.osBatterySaverOn} | Thermal:${t.thermalLevel.name} | Screen:${t.screenOn} | FG:${t.isAppInForeground} | Bucket:${t.standbyBucket.name} | Net:${t.networkType.name}",
+          style = MaterialTheme.typography.labelSmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (pb.suspendedFeatures.isNotEmpty()) {
+          Text(
+            text = "Throttled in ${pb.activeTier.name}: ${pb.suspendedFeatures.joinToString(", ")}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = SemanticWarmAmber,
+          )
+        }
+        Text(
+          text = "Self-Healing: ${sh.lastCheckSummary} (Retries ${sh.consecutiveFailures}/${sh.maxRetries}, Circuit ${if (sh.circuitOpen) "OPEN" else "CLOSED"}) • Log: ${sh.rotatedLogBytes / 1024} KB / 256 KB",
           style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        OutlinedButton(
+          onClick = { showGovernanceDialog = true },
+          modifier = Modifier.testTag("power_governance_button"),
+        ) {
+          Text(if (strings.isHindi) "Tier-0 और फ़ीचर गेट देखें" else "View Tier-0 & Feature Gate Spec")
+        }
       }
     }
 
@@ -277,5 +317,34 @@ fun BatteryScreen(
         }
       }
     }
+  }
+
+  if (showGovernanceDialog) {
+    AlertDialog(
+      onDismissRequest = { showGovernanceDialog = false },
+      title = { Text("Tier-0 & Feature Power Gate") },
+      text = {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          item {
+            Text("Essential 24/7 Tier-0 Functions", style = MaterialTheme.typography.titleMedium)
+          }
+          items(PowerGovernanceRegistry.tierZeroFunctions) { t0 ->
+            Text("• ${t0.name}: ${t0.description}", style = MaterialTheme.typography.bodyMedium)
+          }
+          item {
+            Text("Feature Power Gates", style = MaterialTheme.typography.titleMedium)
+          }
+          items(PowerGovernanceRegistry.featureGates) { gate ->
+            Text(
+              text = "• ${gate.featureName} [${gate.runsInTier}] — Wakeups/hr: ${gate.maxWakeupsPerHour}, Net/hr: ${gate.networkCallsPerHour}, Impact: ${gate.measuredImpact}",
+              style = MaterialTheme.typography.bodyMedium,
+            )
+          }
+        }
+      },
+      confirmButton = {
+        TextButton(onClick = { showGovernanceDialog = false }) { Text("Close") }
+      },
+    )
   }
 }

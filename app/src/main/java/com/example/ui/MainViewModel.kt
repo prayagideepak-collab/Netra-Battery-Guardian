@@ -23,6 +23,7 @@ import com.example.domain.engine.AdaptivePowerTierEngine
 import com.example.domain.engine.AutomationRulesEngine
 import com.example.domain.engine.ChargingSpeedClassifier
 import com.example.domain.engine.HeatingDiagnosisEngine
+import com.example.domain.engine.SelfHealingSupervisor
 import com.example.domain.model.AdaptivePowerTier
 import com.example.domain.model.AppLanguage
 import com.example.domain.model.AppPowerInsight
@@ -35,6 +36,7 @@ import com.example.domain.model.LocationSaverMode
 import com.example.domain.model.LogCategory
 import com.example.domain.model.LogSeverity
 import com.example.domain.model.PowerBudgetMetrics
+import com.example.domain.model.SelfHealingStatus
 import com.example.domain.model.StorageActionTarget
 import com.example.domain.model.StorageInsight
 import com.example.domain.model.ThemeMode
@@ -43,6 +45,7 @@ import com.example.service.BatteryMonitoringService
 import com.example.voice.ChargingVoiceAssistant
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -73,6 +76,7 @@ data class NetraUiState(
   val dischargeSessions: List<DischargeSessionEntity> = emptyList(),
   val activityLogs: List<ActivityLogEntity> = emptyList(),
   val prefs: UserPreferences = UserPreferences(),
+  val selfHealingStatus: SelfHealingStatus = SelfHealingStatus(),
   val statusMessage: String? = null,
   val isNightSilentActive: Boolean = false,
 )
@@ -86,6 +90,7 @@ class MainViewModel @Inject constructor(
   private val chargingClassifier: ChargingSpeedClassifier,
   private val heatingDiagnosisEngine: HeatingDiagnosisEngine,
   private val adaptivePowerTierEngine: AdaptivePowerTierEngine,
+  private val selfHealingSupervisor: SelfHealingSupervisor,
   private val rulesEngine: AutomationRulesEngine,
   private val preferencesRepository: PreferencesRepository,
   private val historyRepository: BatteryHistoryRepository,
@@ -100,6 +105,7 @@ class MainViewModel @Inject constructor(
   private var wakeupHourBucket = currentHourBucket()
   private var isForegroundActive = false
   private var receiverRegistered = false
+  private var foregroundLoopJob: Job? = null
 
   private val liveBatteryReceiver =
     object : BroadcastReceiver() {
@@ -113,7 +119,10 @@ class MainViewModel @Inject constructor(
   init {
     voiceAssistant.ensureInitialized()
     observeDatabaseAndPreferences()
-    startAdaptiveForegroundLoop()
+    viewModelScope.launch {
+      val health = selfHealingSupervisor.runNaturalHealthCheck(triggerSource = "app_launch")
+      _uiState.update { it.copy(selfHealingStatus = health) }
+    }
     refreshNow(intentOverride = null, forceSnapshot = true)
   }
 
@@ -153,8 +162,9 @@ class MainViewModel @Inject constructor(
   }
 
   private fun startAdaptiveForegroundLoop() {
-    viewModelScope.launch {
-      while (isActive) {
+    foregroundLoopJob?.cancel()
+    foregroundLoopJob = viewModelScope.launch {
+      while (isActive && isForegroundActive) {
         val intervalSec = _uiState.value.powerBudget.monitoringIntervalSeconds.coerceIn(15, 180)
         delay(intervalSec * 1000L)
         if (isForegroundActive) {
@@ -167,11 +177,14 @@ class MainViewModel @Inject constructor(
   fun onForegroundStarted() {
     isForegroundActive = true
     registerBatteryReceiver()
+    startAdaptiveForegroundLoop()
     refreshNow(intentOverride = null, forceSnapshot = false)
   }
 
   fun onForegroundStopped() {
     isForegroundActive = false
+    foregroundLoopJob?.cancel()
+    foregroundLoopJob = null
     unregisterBatteryReceiver()
   }
 
@@ -209,14 +222,30 @@ class MainViewModel @Inject constructor(
 
       val telemetry =
         withContext(Dispatchers.Default) {
-          telemetryCollector.collect(intentOverride, prefs.observedCapacityMah)
+          telemetryCollector.collect(
+            intentOverride = intentOverride,
+            observedCapacityFallbackMah = prefs.observedCapacityMah,
+            isAppInForeground = isForegroundActive,
+          )
         }
+      val snapshotsToday = _uiState.value.powerBudget.snapshotsRecordedToday
+      val powerBudget = adaptivePowerTierEngine.evaluate(telemetry, wakeupsThisHour, snapshotsToday)
       val hasUsage = appPowerInspector.hasUsageStatsPermission()
       val topApps =
         withContext(Dispatchers.Default) {
-          if (hasUsage) appPowerInspector.collectTopApps() else emptyList()
+          if (hasUsage && powerBudget.activeTier != AdaptivePowerTier.SURVIVAL) {
+            appPowerInspector.collectTopApps()
+          } else {
+            emptyList()
+          }
         }
-      val eval = rulesEngine.evaluate(telemetry, prefs, topApps, forceSnapshot = forceSnapshot)
+      val eval = rulesEngine.evaluate(
+        telemetry = telemetry,
+        prefs = prefs,
+        topApps = topApps,
+        forceSnapshot = forceSnapshot,
+        dbBatchIntervalSeconds = powerBudget.dbBatchIntervalSeconds,
+      )
       val chargingDiag = chargingClassifier.diagnose(telemetry)
       val heatReport =
         heatingDiagnosisEngine.diagnose(
@@ -232,8 +261,6 @@ class MainViewModel @Inject constructor(
         withContext(Dispatchers.IO) {
           storageInspector.inspect(telemetry.temperatureCelsius, telemetry.levelPercent)
         }
-      val snapshotsToday = _uiState.value.powerBudget.snapshotsRecordedToday
-      val powerBudget = adaptivePowerTierEngine.evaluate(telemetry, wakeupsThisHour, snapshotsToday)
 
       _uiState.update {
         it.copy(
@@ -245,6 +272,7 @@ class MainViewModel @Inject constructor(
           storageInsight = storageInsight,
           topApps = topApps,
           hasUsageStatsPermission = hasUsage,
+          selfHealingStatus = selfHealingSupervisor.currentStatus(),
           isNightSilentActive = voiceAssistant.isNightSilentActive(prefs),
         )
       }

@@ -1,8 +1,8 @@
 package com.example.di
 
 import android.content.Context
-import com.example.data.local.db.BatteryDatabase
-import com.example.data.local.db.BatterySnapshotDao
+import com.example.data.local.db.AppDatabase
+import com.example.data.local.db.BatteryDao
 import com.example.data.local.db.NetraDao
 import dagger.Module
 import dagger.Provides
@@ -17,15 +17,15 @@ object AppModule {
 
   @Provides
   @Singleton
-  fun provideBatteryDatabase(@ApplicationContext context: Context): BatteryDatabase =
-    BatteryDatabase.getInstance(context)
+  fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase =
+    AppDatabase.getInstance(context)
 
   @Provides
   @Singleton
-  fun provideBatterySnapshotDao(database: BatteryDatabase): BatterySnapshotDao =
-    database.batterySnapshotDao()
+  fun provideBatteryDao(database: AppDatabase): BatteryDao =
+    database.batteryDao()
 
   @Provides
   @Singleton
-  fun provideNetraDao(database: BatteryDatabase): NetraDao = database.netraDao()
+  fun provideNetraDao(database: AppDatabase): NetraDao = database.netraDao()
 }
