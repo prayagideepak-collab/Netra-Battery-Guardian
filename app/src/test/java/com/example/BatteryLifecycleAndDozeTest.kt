@@ -84,6 +84,7 @@ class BatteryLifecycleAndDozeTest {
       nowMillis = day1Base,
     )
     assertFalse(skippedRes.loggedNewEntry)
+    assertEquals("Discharging must not seed a capacity baseline", 0, prefsRepo.preferences.first().designCapacityBaselineMah)
     assertEquals(0, db.netraDao().observeBatteryHealthLogs().first().size)
 
     // 2. Charging at 100% with OS cycle count = 42 -> logs once for Day 1
