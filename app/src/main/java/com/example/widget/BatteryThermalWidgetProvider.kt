@@ -59,14 +59,14 @@ class BatteryThermalWidgetProvider : AppWidgetProvider() {
 
     val thermalBadgeText: String
       get() = if (temperatureCelsius.isFinite()) {
-        "${thermalStatus.labelEn} • ${telemetryText(temperatureCelsius, "°C", 1)}"
+        telemetryText(temperatureCelsius, "°C", 1)
       } else {
-        "Thermal: Unavailable"
+        ""
       }
 
     val chargingStatusText: String
       get() = when {
-        levelPercent !in 0..100 -> "Status: Unavailable"
+        levelPercent !in 0..100 -> ""
         isCharging && plugTypeLabel.isNotBlank() && plugTypeLabel != "NONE" -> "Charging ($plugTypeLabel)"
         isCharging -> "Charging"
         isPlugged -> "Plugged (Not Charging)"
@@ -77,7 +77,7 @@ class BatteryThermalWidgetProvider : AppWidgetProvider() {
       get() = if (voltageMv > 0) {
         String.format(Locale.US, "%d mV (%.2f V) • Tap for Sentinel", voltageMv, voltageMv / 1000f)
       } else {
-        "Voltage: Unavailable • Tap for Sentinel"
+        ""
       }
   }
 
@@ -132,7 +132,7 @@ class BatteryThermalWidgetProvider : AppWidgetProvider() {
       val rawVoltage = sticky?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1) ?: -1
       val voltageMv = when {
         rawVoltage <= 0 -> -1
-        rawVoltage in 1..20 -> rawVoltage * 1000
+        rawVoltage in 1..20 -> -1
         else -> rawVoltage
       }
 

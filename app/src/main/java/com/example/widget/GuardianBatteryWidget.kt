@@ -27,9 +27,9 @@ class GuardianBatteryWidget : AppWidgetProvider() {
 
   companion object {
     private const val PREFS = "guardian_widget_last_reading"
-    private const val U = "Unavailable"
+    private const val U = ""
     private val defaults = linkedMapOf(
-      "percent" to U, "status" to "Status: $U", "temperature" to U,
+      "percent" to U, "status" to U, "temperature" to U,
       "voltage" to U, "current" to U, "power" to U, "health" to U,
       "etaLabel" to "Time left", "eta" to U,
       "updated" to "No reading yet · Tap to open Guardian", "title" to "NETRA BATTERY GUARDIAN",
@@ -62,7 +62,7 @@ class GuardianBatteryWidget : AppWidgetProvider() {
         ?.let { word("Approx. ${it / 60}h ${it % 60}m", "लगभग ${it / 60}घं ${it % 60}मि") } ?: U
       val stamp = if (t.timestampMillis > 0) SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(t.timestampMillis)) else null
       return Model(linkedMapOf(
-        "percent" to batteryLevelText(t.levelPercent), "status" to "${word("Status", "स्थिति")}: $knownStatus",
+        "percent" to batteryLevelText(t.levelPercent), "status" to if (knownStatus.isBlank()) "" else "${word("Status", "स्थिति")}: $knownStatus",
         "temperature" to telemetryText(t.temperatureCelsius, "°C"),
         "voltage" to telemetryText(t.voltageVolts, " V", 2),
         "current" to telemetryText(t.currentMa, " mA", 0),

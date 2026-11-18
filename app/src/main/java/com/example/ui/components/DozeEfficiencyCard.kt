@@ -40,7 +40,7 @@ fun DozeEfficiencyCard(
   modifier: Modifier = Modifier,
 ) {
   val totalFormatted = DozeEfficiencyCalculator.formatDuration(metrics.totalDozeTimeMillis)
-  val savedPercentFormatted = String.format(Locale.US, "%.1f%%", metrics.estimatedBatterySavedPercent)
+  val savedPercentFormatted = if (isHindi) "अनुपलब्ध (Unavailable)" else "Unavailable"
   val pillColor = if (metrics.isCurrentlyInDoze) SemanticWarmAmber else SemanticCoolMint
   val statusText =
     if (metrics.isCurrentlyInDoze) {
@@ -91,7 +91,7 @@ fun DozeEfficiencyCard(
           }
           Column {
             Text(
-              text = if (isHindi) "डोज़ मोड ऊर्जा बचत" else "Doze Mode Energy Efficiency",
+              text = if (isHindi) "डोज़ सत्र" else "Observed Doze Sessions",
               style = MaterialTheme.typography.titleMedium,
             )
             Text(
@@ -115,12 +115,6 @@ fun DozeEfficiencyCard(
           modifier = Modifier.weight(1f),
         )
         DozeMetricTile(
-          label = if (isHindi) "अनुमानित बचत" else "Est. Energy Saved",
-          value = "$savedPercentFormatted (~${metrics.estimatedMahSaved} mAh)",
-          valueTag = "doze_energy_saved_value",
-          modifier = Modifier.weight(1f),
-        )
-        DozeMetricTile(
           label = if (isHindi) "लॉग सत्र" else "Logged Cycles",
           value = "${metrics.completedSessionsCount} (${metrics.transitionsLoggedCount} ev)",
           valueTag = "doze_transitions_value",
@@ -128,48 +122,7 @@ fun DozeEfficiencyCard(
         )
       }
 
-      Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically,
-        ) {
-          Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-          ) {
-            Icon(
-              imageVector = Icons.Rounded.Bolt,
-              contentDescription = null,
-              tint = SemanticIceCyan,
-              modifier = Modifier.size(16.dp),
-            )
-            Text(
-              text = if (isHindi) {
-                "निष्क्रिय दक्षता स्कोर: ${metrics.efficiencyScorePercent}%"
-              } else {
-                "Idle Saving Efficiency: ${metrics.efficiencyScorePercent}%"
-              },
-              style = MaterialTheme.typography.labelLarge,
-            )
-          }
-          WhyExplainChip(
-            label = whyLabel,
-            title = if (isHindi) "डोज़ दक्षता गणना" else "Doze Efficiency Metrics",
-            explanation = if (isHindi) {
-              "डोज़ प्रवेश और निकास ब्रॉडकास्ट से कुल समय जोड़ा जाता है और गैर-जरूरी स्कैन रोकने से होने वाली अनुमानित बैटरी बचत दिखाई जाती है।"
-            } else {
-              "Paired Entered/Exited Doze Mode logs measure exact idle time. Pausing background jobs and scans during Doze saves ~1.45% battery per hour versus unthrottled standby."
-            },
-          )
-        }
-        LinearProgressIndicator(
-          progress = { (metrics.efficiencyScorePercent / 100f).coerceIn(0f, 1f) },
-          modifier = Modifier.fillMaxWidth().height(8.dp),
-          color = SemanticCoolMint,
-          trackColor = SemanticIceCyan.copy(alpha = 0.25f),
-        )
-      }
+
     }
   }
 }

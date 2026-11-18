@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -133,14 +134,13 @@ class BatterySentinelDashboardAndWidgetTest {
     composeTestRule.onNodeWithTag("sentinel_battery_technology_value")
       .assertTextContains("Li-ion", substring = true)
     composeTestRule.onNodeWithTag("sentinel_battery_capacity_value")
-      .assertTextContains("Approx. 4500 mAh", substring = true)
+      .assertTextContains("Counter-derived ~4500 mAh", substring = true)
 
     // 2. Temperature Monitoring card
     composeTestRule.onNodeWithTag("sentinel_temperature_card")
       .performScrollTo()
       .assertIsDisplayed()
-    composeTestRule.onNodeWithTag("sentinel_temperature_status_badge")
-      .assertTextContains("Warm", substring = true)
+    composeTestRule.onNodeWithTag("sentinel_temperature_status_badge").assertDoesNotExist()
     composeTestRule.onNodeWithTag("sentinel_temp_delta_value")
       .assertTextContains("+2.0°C", substring = true)
 
@@ -183,8 +183,8 @@ class BatterySentinelDashboardAndWidgetTest {
     )
     assertTrue(invertedCharge.isAvailable)
     assertEquals(1820f, invertedCharge.magnitudeMa, 0.01f)
-    assertEquals("Incoming (Charging)", invertedCharge.directionLabelEn)
-    assertEquals("+1820 mA", invertedCharge.chargingCurrentText)
+    assertEquals("Signed sensor reading", invertedCharge.directionLabelEn)
+    assertEquals("-1820 mA", invertedCharge.chargingCurrentText)
 
     // OEM reporting positive current during discharging -> normalized to Outgoing (Discharging)
     val invertedDischarge = validateHardwareCurrent(
@@ -194,8 +194,8 @@ class BatterySentinelDashboardAndWidgetTest {
     )
     assertTrue(invertedDischarge.isAvailable)
     assertEquals(460f, invertedDischarge.magnitudeMa, 0.01f)
-    assertEquals("Outgoing (Discharging)", invertedDischarge.directionLabelEn)
-    assertEquals("-460 mA", invertedDischarge.dischargingCurrentText)
+    assertEquals("Signed sensor reading", invertedDischarge.directionLabelEn)
+    assertEquals("+460 mA", invertedDischarge.dischargingCurrentText)
 
     // Unavailable sensor -> strictly "Unavailable", never fake numbers
     val unavailable = validateHardwareCurrent(
@@ -239,22 +239,16 @@ class BatterySentinelDashboardAndWidgetTest {
 
     composeTestRule.waitForIdle()
 
-    composeTestRule.onNodeWithTag("sentinel_battery_health_value")
-      .assertTextContains("Unavailable", substring = true)
-    composeTestRule.onNodeWithTag("sentinel_battery_technology_value")
-      .assertTextContains("Unavailable", substring = true)
-    composeTestRule.onNodeWithTag("sentinel_battery_capacity_value")
-      .assertTextContains("Unavailable", substring = true)
+    composeTestRule.onNodeWithTag("sentinel_battery_health_value").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("sentinel_battery_technology_value").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("sentinel_battery_capacity_value").assertDoesNotExist()
 
     composeTestRule.onNodeWithTag("sentinel_current_card").performScrollTo()
-    composeTestRule.onNodeWithTag("sentinel_charging_current_value")
-      .assertTextContains("Unavailable", substring = true)
-    composeTestRule.onNodeWithTag("sentinel_discharging_current_value")
-      .assertTextContains("Unavailable", substring = true)
+    composeTestRule.onNodeWithTag("sentinel_charging_current_value").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("sentinel_discharging_current_value").assertDoesNotExist()
 
     composeTestRule.onNodeWithTag("sentinel_power_card").performScrollTo()
-    composeTestRule.onNodeWithTag("sentinel_power_speed_value")
-      .assertTextContains("Unavailable", substring = true)
+    composeTestRule.onNodeWithTag("sentinel_power_speed_value").assertDoesNotExist()
   }
 
   @Test
@@ -286,14 +280,14 @@ class BatterySentinelDashboardAndWidgetTest {
     val statusView = view.findViewById<TextView>(R.id.widget_charging_status)
 
     assertEquals("88%", percentView.text.toString())
-    assertEquals("Hot • 41.2°C", thermalBadge.text.toString())
+    assertEquals("41.2°C", thermalBadge.text.toString())
     assertEquals("Charging (AC)", statusView.text.toString())
 
     // Also verify Critical and Normal classifications
-    assertEquals(SentinelTemperatureStatus.NORMAL, classifySentinelTemperature(32.0f))
-    assertEquals(SentinelTemperatureStatus.WARM, classifySentinelTemperature(37.2f))
-    assertEquals(SentinelTemperatureStatus.HOT, classifySentinelTemperature(41.2f))
-    assertEquals(SentinelTemperatureStatus.CRITICAL, classifySentinelTemperature(45.0f))
+    assertEquals(SentinelTemperatureStatus.UNAVAILABLE, classifySentinelTemperature(32.0f))
+    assertEquals(SentinelTemperatureStatus.UNAVAILABLE, classifySentinelTemperature(37.2f))
+    assertEquals(SentinelTemperatureStatus.UNAVAILABLE, classifySentinelTemperature(41.2f))
+    assertEquals(SentinelTemperatureStatus.UNAVAILABLE, classifySentinelTemperature(45.0f))
     assertEquals(SentinelTemperatureStatus.UNAVAILABLE, classifySentinelTemperature(Float.NaN))
   }
 }

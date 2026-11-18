@@ -669,9 +669,13 @@ class MainViewModel @Inject constructor(
     viewModelScope.launch {
       telemetryCollector.setCoolingBrightnessAllowed(false)
       com.example.widget.GuardianBatteryWidget.clear(app)
+      kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        androidx.work.WorkManager.getInstance(app).cancelUniqueWork(NetraWorkScheduler.WORK_CHARGING_CSV_EXPORT).result.get()
+      }
       historyRepository.clearAllLocalData()
+      reportExporter.clearPrivateReports()
       preferencesRepository.resetAllPreferences()
-      _uiState.update { it.copy(statusMessage = "All local Netra data cleared.") }
+      _uiState.update { it.copy(lastCsvExportPath = null, statusMessage = "All local Netra data cleared.") }
       refreshNow(forceSnapshot = true)
     }
   }

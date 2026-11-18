@@ -76,7 +76,7 @@ class BatteryTelemetryCollector @Inject constructor(
     val chargeCounterRaw = batteryManager?.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER) ?: -1L
     val chargeCounterUah = if (chargeCounterRaw > 0L) chargeCounterRaw else -1L
     val derivedCapacityMah =
-      if (chargeCounterUah > 0L && levelPercent >= 15) {
+      if (chargeCounterUah > 0L && levelPercent in 15..100) {
         ((chargeCounterUah / 1000.0) / (levelPercent / 100.0)).toInt()
       } else {
         -1 // Legacy cached capacities lack measurement provenance. Do not reuse them.

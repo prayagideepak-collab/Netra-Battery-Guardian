@@ -73,13 +73,8 @@ enum class SentinelTemperatureStatus(
 }
 
 fun classifySentinelTemperature(tempCelsius: Float): SentinelTemperatureStatus {
-  if (!tempCelsius.isFinite()) return SentinelTemperatureStatus.UNAVAILABLE
-  return when {
-    tempCelsius >= 44.0f -> SentinelTemperatureStatus.CRITICAL
-    tempCelsius >= 40.0f -> SentinelTemperatureStatus.HOT
-    tempCelsius >= 36.0f -> SentinelTemperatureStatus.WARM
-    else -> SentinelTemperatureStatus.NORMAL
-  }
+  // Celsius alone cannot establish a device-specific safe/critical threshold.
+  return SentinelTemperatureStatus.UNAVAILABLE
 }
 
 fun sentinelTemperatureColor(status: SentinelTemperatureStatus): Color {
@@ -134,44 +129,18 @@ fun validateHardwareCurrent(
   val rawText = String.format(Locale.US, "%s%.0f mA", rawPrefix, rawCurrentMa)
   val magText = String.format(Locale.US, "%.0f mA", absMa)
 
-  return when {
-    absMa < 0.5f -> ValidatedCurrentReading(
-      isAvailable = true,
-      magnitudeMa = 0f,
-      rawCurrentMa = rawCurrentMa,
-      directionLabelEn = "Idle (0 mA)",
-      directionLabelHi = "निष्क्रिय (Idle 0 mA)",
-      chargingCurrentText = "0 mA",
-      dischargingCurrentText = "0 mA",
-      liveCurrentText = "0 mA",
-      polarityNoteEn = "Validated idle flow (Raw sensor: $rawText)",
-      polarityNoteHi = "सत्यापित शून्य प्रवाह (कच्चा सेंसर: $rawText)",
-    )
-    isCharging -> ValidatedCurrentReading(
-      isAvailable = true,
-      magnitudeMa = absMa,
-      rawCurrentMa = rawCurrentMa,
-      directionLabelEn = "Incoming (Charging)",
-      directionLabelHi = "आवक (Incoming / Charging)",
-      chargingCurrentText = "+$magText",
-      dischargingCurrentText = "0 mA (Charging)",
-      liveCurrentText = "+$magText (Incoming)",
-      polarityNoteEn = "Device polarity validated against charging state (Raw sensor: $rawText)",
-      polarityNoteHi = "चार्जिंग स्थिति से पोलैरिटी सत्यापित (कच्चा सेंसर: $rawText)",
-    )
-    else -> ValidatedCurrentReading(
-      isAvailable = true,
-      magnitudeMa = absMa,
-      rawCurrentMa = rawCurrentMa,
-      directionLabelEn = if (isPlugged) "Outgoing (Plugged / Paused)" else "Outgoing (Discharging)",
-      directionLabelHi = if (isPlugged) "जावक (प्लग्ड / रुका हुआ)" else "जावक (Outgoing / Discharging)",
-      chargingCurrentText = "0 mA (Discharging)",
-      dischargingCurrentText = "-$magText",
-      liveCurrentText = "-$magText (Outgoing)",
-      polarityNoteEn = "Device polarity validated against discharging state (Raw sensor: $rawText)",
-      polarityNoteHi = "डिस्चार्ज स्थिति से पोलैरिटी सत्यापित (कच्चा सेंसर: $rawText)",
-    )
-  }
+  return ValidatedCurrentReading(
+    isAvailable = true,
+    magnitudeMa = absMa,
+    rawCurrentMa = rawCurrentMa,
+    directionLabelEn = "Signed sensor reading",
+    directionLabelHi = "सेंसर का संकेत सहित माप",
+    chargingCurrentText = rawText,
+    dischargingCurrentText = rawText,
+    liveCurrentText = rawText,
+    polarityNoteEn = "Raw sensor sign retained. OEM direction and charger input are not independently verified.",
+    polarityNoteHi = "मूल सेंसर संकेत दिखाया गया है। दिशा और चार्जर इनपुट सत्यापित नहीं हैं।",
+  )
 }
 
 /**
@@ -241,7 +210,7 @@ fun calculateHardwarePower(
       isAvailable = true,
       powerWatts = watts,
       chargingPowerText = wattsText,
-      dischargingPowerText = "0.00 W (Charging)",
+      dischargingPowerText = "Unavailable: charger output not measured",
       formulaBreakdownText = formulaText,
       chargingSpeedLabelEn = speedEn,
       chargingSpeedLabelHi = speedHi,
@@ -250,7 +219,7 @@ fun calculateHardwarePower(
     ValidatedPowerReading(
       isAvailable = true,
       powerWatts = watts,
-      chargingPowerText = "0.00 W (Discharging)",
+      chargingPowerText = "Unavailable: charger input not measured",
       dischargingPowerText = wattsText,
       formulaBreakdownText = formulaText,
       chargingSpeedLabelEn = speedEn,
@@ -385,7 +354,7 @@ fun BatteryMonitoringDashboardView(
           )
           Column {
             Text(
-              text = if (isHindi) "बैटरी सेंटिनल प्रो मॉनिटर" else "Battery Sentinel Pro Monitor",
+              text = if (isHindi) "गार्डियन डिवाइस माप" else "Guardian Device Readings",
               style = MaterialTheme.typography.titleMedium,
               fontWeight = FontWeight.Bold,
             )
@@ -483,7 +452,7 @@ fun BatteryMonitoringDashboardView(
             )
           }
         }
-        StatusPill(
+        if (tempStatus != SentinelTemperatureStatus.UNAVAILABLE) StatusPill(
           text = if (isHindi) tempStatus.labelHi else tempStatus.labelEn,
           color = tempAccent,
           modifier = Modifier.testTag("sentinel_temperature_status_badge"),
@@ -528,7 +497,7 @@ fun BatteryMonitoringDashboardView(
         )
         SentinelMetricBox(
           title = if (isHindi) "तापमान स्थिति" else "Thermal State",
-          value = tempStatus.labelEn,
+          value = if (tempStatus == SentinelTemperatureStatus.UNAVAILABLE) "" else tempStatus.labelEn,
           accent = tempAccent,
           modifier = Modifier
             .weight(1f)
@@ -573,13 +542,13 @@ fun BatteryMonitoringDashboardView(
           }
         }
         StatusPill(
-          text = if (telemetry.voltageMv > 0) "${telemetry.voltageMv} mV" else "Unavailable",
+          text = if (telemetry.voltageMv > 0) "${telemetry.voltageMv} mV" else "",
           color = SemanticIceCyan,
           modifier = Modifier.testTag("sentinel_voltage_pill"),
         )
       }
 
-      val voltageMvText = if (telemetry.voltageMv > 0) "${telemetry.voltageMv} mV" else "Unavailable"
+      val voltageMvText = if (telemetry.voltageMv > 0) "${telemetry.voltageMv} mV" else ""
       val voltageVoltsText = if (telemetry.voltageMv > 0) {
         String.format(Locale.US, "%.3f V", telemetry.voltageMv / 1000f)
       } else {
@@ -940,6 +909,8 @@ private fun SentinelMetricBox(
   accent: Color,
   modifier: Modifier = Modifier,
 ) {
+  if (value.isBlank() || value.contains("Unavailable", ignoreCase = true)) return
+
   Surface(
     modifier = modifier,
     shape = RoundedCornerShape(14.dp),
@@ -972,6 +943,8 @@ private fun SentinelSpecRow(
   value: String,
   valueTag: String,
 ) {
+  if (value.isBlank() || value.contains("Unavailable", ignoreCase = true)) return
+
   Row(
     modifier = Modifier.fillMaxWidth(),
     horizontalArrangement = Arrangement.SpaceBetween,

@@ -48,7 +48,7 @@ class ThermalSafetyMonitorWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, params) {
 
   companion object {
-    const val CRITICAL_TEMPERATURE_CELSIUS = 45.0f
+    const val CRITICAL_TEMPERATURE_CELSIUS = 46.0f
     const val CRITICAL_TITLE_EN = "Critical Thermal Event Detected"
   }
 
@@ -90,11 +90,9 @@ class ThermalSafetyMonitorWorker @AssistedInject constructor(
       rawHealth == BatteryManager.BATTERY_HEALTH_OVERHEAT ||
         telemetry.healthState == BatteryHealthState.OVERHEAT
     val isOsCriticalThermal =
-      telemetry.thermalLevel.ordinal >= ThermalLevel.CRITICAL.ordinal
+      telemetry.thermalLevel in setOf(ThermalLevel.CRITICAL, ThermalLevel.EMERGENCY, ThermalLevel.SHUTDOWN)
     val isCriticalTemp =
-      tempC >= CRITICAL_TEMPERATURE_CELSIUS ||
-        zone.ordinal >= TemperatureZone.CRITICAL.ordinal ||
-        isOverheatHealth ||
+      isOverheatHealth ||
         isOsCriticalThermal
 
     if (!isCriticalTemp) {
@@ -106,7 +104,7 @@ class ThermalSafetyMonitorWorker @AssistedInject constructor(
     }
 
     val nowMillis = System.currentTimeMillis()
-    val tempStr = String.format(Locale.US, "%.1f", tempC)
+    val tempStr = if (tempC.isFinite()) String.format(Locale.US, "%.1f", tempC) else ""
     val voltageVolts = String.format(Locale.US, "%.2f", telemetry.voltageMv / 1000f)
 
     // Persist snapshot and critical thermal event log atomically to Room

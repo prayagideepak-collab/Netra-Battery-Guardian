@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -112,12 +113,8 @@ class StorageDashboardAndThermalLogTest {
       .assertTextContains("25.0%", substring = true)
 
     // Verify top storage-consuming app categories are listed
-    composeTestRule.onNodeWithTag("storage_category_row_apps_binaries")
-      .performScrollTo()
-      .assertIsDisplayed()
-    composeTestRule.onNodeWithTag("storage_category_row_app_data")
-      .performScrollTo()
-      .assertIsDisplayed()
+    composeTestRule.onNodeWithTag("storage_category_row_apps_binaries").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("storage_category_row_app_data").assertDoesNotExist()
     composeTestRule.onNodeWithTag("storage_category_row_app_caches")
       .performScrollTo()
       .assertIsDisplayed()

@@ -12,6 +12,8 @@ import com.example.domain.model.batteryLevelText
 import com.example.domain.model.telemetryText
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
@@ -35,6 +37,13 @@ class LocalReportExporter @Inject constructor(
   @ApplicationContext private val context: Context,
   private val historyRepository: BatteryHistoryRepository,
 ) {
+  private val reportMutex = Mutex()
+
+  suspend fun clearPrivateReports() = reportMutex.withLock {
+    File(context.filesDir, "NetraReports").deleteRecursively()
+    Unit
+  }
+
   private var logWriter: BoundedLogFileWriter? = null
 
   constructor(
@@ -72,10 +81,10 @@ class LocalReportExporter @Inject constructor(
     intentOverride: Intent? = null,
     lookbackDays: Int = 30,
   ): CsvExportResult =
-    withContext(Dispatchers.IO) {
+    withContext(Dispatchers.IO) { reportMutex.withLock {
       if (!isDeviceCurrentlyCharging(intentOverride)) {
         logWriter?.append("CSV_EXPORT", "Skipped battery health & temperature CSV export: device is not charging.")
-        return@withContext CsvExportResult(
+        return@withLock CsvExportResult(
           exported = false,
           skippedReason = "CSV export is only triggered while the device is charging.",
         )
@@ -109,9 +118,9 @@ class LocalReportExporter @Inject constructor(
       snapshots.forEach { s ->
         sb.appendLine(
           "TEMP_SNAPSHOT,${dateFormatter.format(Date(s.timestampMillis))},${s.levelPercent},${
-            String.format(Locale.US, "%.1f", s.temperatureCelsius)
-          },${s.voltageMv},${String.format(Locale.US, "%.0f", s.currentMa)},${
-            String.format(Locale.US, "%.2f", s.powerWatts)
+            telemetryText(s.temperatureCelsius)
+          },${s.voltageMv},${telemetryText(s.currentMa, decimals = 0)},${
+            telemetryText(s.powerWatts, decimals = 2)
           },${s.isCharging},${s.thermalLevel},,,,,,${s.activeProfile},,",
         )
       }
@@ -136,7 +145,7 @@ class LocalReportExporter @Inject constructor(
         snapshotRows = snapshots.size,
         activityRows = logs.size,
       )
-    }
+    } }
 
   suspend fun exportCsv(): File =
     withContext(Dispatchers.IO) {
@@ -154,7 +163,7 @@ class LocalReportExporter @Inject constructor(
         sb.appendLine(
           "SNAPSHOT,${dateFormatter.format(Date(s.timestampMillis))},${s.levelPercent},${
             telemetryText(s.temperatureCelsius)
-          },${if (s.voltageMv > 0) s.voltageMv.toString() else "Unavailable"},${telemetryText(s.currentMa, decimals = 0)},${
+          },${if (s.voltageMv > 0) s.voltageMv.toString() else ""},${telemetryText(s.currentMa, decimals = 0)},${
             telemetryText(s.powerWatts, decimals = 2)
           },${s.isCharging},${s.screenOn},${s.activeProfile},,"
         )

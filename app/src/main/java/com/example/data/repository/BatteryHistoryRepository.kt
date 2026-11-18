@@ -112,6 +112,7 @@ class BatteryHistoryRepository @Inject constructor(
           endTimeMillis = null,
           startLevel = telemetry.levelPercent,
           endLevel = telemetry.levelPercent,
+          percentageGained = (telemetry.levelPercent - open.startLevel).coerceAtLeast(0),
           peakTempCelsius = telemetry.temperatureCelsius.takeIf { it.isFinite() } ?: Float.NEGATIVE_INFINITY,
           avgPowerWatts = powerWatts.takeIf { it.isFinite() } ?: Float.NEGATIVE_INFINITY,
           maxPowerWatts = powerWatts.takeIf { it.isFinite() } ?: Float.NEGATIVE_INFINITY,
@@ -123,6 +124,7 @@ class BatteryHistoryRepository @Inject constructor(
       dao.updateChargingSession(
         open.copy(
           endLevel = telemetry.levelPercent,
+          percentageGained = (telemetry.levelPercent - open.startLevel).coerceAtLeast(0),
           peakTempCelsius = knownMax(open.peakTempCelsius, telemetry.temperatureCelsius),
           avgPowerWatts = if (open.avgPowerWatts.isFinite() && powerWatts.isFinite()) (open.avgPowerWatts + powerWatts) / 2f else knownMax(open.avgPowerWatts, powerWatts),
           maxPowerWatts = knownMax(open.maxPowerWatts, powerWatts),

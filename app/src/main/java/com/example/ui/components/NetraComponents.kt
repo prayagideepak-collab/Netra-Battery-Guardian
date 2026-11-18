@@ -155,7 +155,7 @@ fun AnimatedBatteryRing(
         )
       }
       Text(
-        text = if (levelPercent in 0..100) "$levelPercent%" else "Unavailable",
+        text = if (levelPercent in 0..100) "$levelPercent%" else "",
         style = if (levelPercent in 0..100) MaterialTheme.typography.displayLarge else MaterialTheme.typography.titleLarge,
         maxLines = 1,
         softWrap = false,

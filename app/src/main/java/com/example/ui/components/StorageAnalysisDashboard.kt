@@ -91,65 +91,13 @@ object StorageCategoryBreakdownCalculator {
     val usedBytes = insight.usedBytes.coerceIn(0L, totalBytes)
     if (usedBytes <= 0L) return emptyList()
 
-    val measuredAppCode =
-      diskReport?.let { r ->
-        r.selfAppBytes + r.heavyApps.sumOf { it.appBytes }
-      } ?: 0L
-    val measuredAppData =
-      diskReport?.let { r ->
-        r.selfDataBytes + r.heavyApps.sumOf { it.dataBytes }
-      } ?: 0L
-    val measuredCache =
-      maxOf(
-        insight.appOwnCacheBytes,
-        diskReport?.let { r -> r.selfCacheBytes + r.heavyApps.sumOf { it.cacheBytes } } ?: 0L,
-      )
-    val measuredHeavyFiles =
-      diskReport?.heavyAppFiles?.sumOf { it.sizeBytes } ?: 0L
-
-    // Allocate occupied bytes across the 5 top storage-consuming app/system categories
-    val cacheBytes =
-      if (measuredCache > 0L) {
-        measuredCache.coerceAtMost((usedBytes * 0.18).toLong().coerceAtLeast(measuredCache))
-      } else {
-        (usedBytes * 0.06).toLong()
-      }.coerceIn(0L, usedBytes)
-
-    val remainingAfterCache = (usedBytes - cacheBytes).coerceAtLeast(0L)
-
-    val appsAndCodeBytes =
-      if (measuredAppCode > 0L) {
-        maxOf(measuredAppCode, (remainingAfterCache * 0.30).toLong())
-      } else {
-        (remainingAfterCache * 0.32).toLong()
-      }.coerceAtMost(remainingAfterCache)
-
-    val appDataBytes =
-      if (measuredAppData > 0L) {
-        maxOf(measuredAppData, (remainingAfterCache * 0.24).toLong())
-      } else {
-        (remainingAfterCache * 0.25).toLong()
-      }.coerceAtMost((remainingAfterCache - appsAndCodeBytes).coerceAtLeast(0L))
-
-    val mediaAndSocialBytes =
-      ((remainingAfterCache * 0.22).toLong() + measuredHeavyFiles)
-        .coerceAtMost((remainingAfterCache - appsAndCodeBytes - appDataBytes).coerceAtLeast(0L))
-
-    val downloadsBytes =
-      if (insight.downloadsEstimatedBytes > 0L) {
-        insight.downloadsEstimatedBytes
-      } else {
-        (remainingAfterCache * 0.09).toLong()
-      }.coerceAtMost(
-        (remainingAfterCache - appsAndCodeBytes - appDataBytes - mediaAndSocialBytes).coerceAtLeast(0L)
-      )
-
-    val systemOsBytes =
-      (remainingAfterCache - appsAndCodeBytes - appDataBytes - mediaAndSocialBytes - downloadsBytes)
-        .coerceAtLeast(0L)
-
-    val topHeavyAppNames =
-      diskReport?.heavyApps?.take(2)?.joinToString(", ") { it.appName }?.takeIf { it.isNotBlank() }
+    val cacheBytes = insight.appOwnCacheBytes.coerceIn(0L, usedBytes)
+    val appsAndCodeBytes = 0L
+    val appDataBytes = 0L
+    val mediaAndSocialBytes = 0L
+    val downloadsBytes = 0L
+    val systemOsBytes = (usedBytes - cacheBytes).coerceAtLeast(0L)
+    val topHeavyAppNames: String? = null
 
     val rawItems = listOf(
       StorageAppCategoryItem(
@@ -218,8 +166,8 @@ object StorageCategoryBreakdownCalculator {
       ),
       StorageAppCategoryItem(
         id = "app_caches",
-        titleEn = "App & Browser Caches (Reclaimable)",
-        titleHi = "ऐप और ब्राउज़र कैश (साफ़ करने योग्य)",
+        titleEn = "Netra App Cache (Measured)",
+        titleHi = "नेत्रा ऐप कैश (मापा गया)",
         subtitleEn = "Netra own cache: ${StorageInspector.formatBytes(insight.appOwnCacheBytes)} • Temporary buffers",
         subtitleHi = "नेत्रा कैश: ${StorageInspector.formatBytes(insight.appOwnCacheBytes)} • अस्थायी कैश",
         bytes = cacheBytes,
@@ -233,10 +181,10 @@ object StorageCategoryBreakdownCalculator {
       ),
       StorageAppCategoryItem(
         id = "system_os",
-        titleEn = "Android OS & System Partitions",
-        titleHi = "Android सिस्टम और OS फ़ाइलें",
-        subtitleEn = "Read-only system image, ART runtime & vendor partitions",
-        subtitleHi = "सिस्टम इमेज, ART रनटाइम और सुरक्षित पार्टीशन",
+        titleEn = "Other Occupied Space (Unattributed)",
+        titleHi = "अन्य भरा स्थान (वर्ग अज्ञात)",
+        subtitleEn = "Filesystem total minus measured Netra cache; content type is not known",
+        subtitleHi = "कुल भरे स्थान में से मापा नेत्रा कैश घटाया गया; सामग्री का वर्ग ज्ञात नहीं है",
         bytes = systemOsBytes,
         shareOfOccupiedPercent = (systemOsBytes * 100f) / usedBytes.toFloat(),
         shareOfTotalPercent = (systemOsBytes * 100f) / totalBytes.toFloat(),
@@ -248,7 +196,7 @@ object StorageCategoryBreakdownCalculator {
       ),
     )
 
-    return rawItems.sortedByDescending { it.bytes }
+    return rawItems.filter { it.bytes > 0L }.sortedByDescending { it.bytes }
   }
 }
 
@@ -268,7 +216,8 @@ fun StorageAnalysisDashboard(
 ) {
   var showStackedBarMode by remember { mutableStateOf(false) }
 
-  val totalBytes = storageInsight.totalBytes.coerceAtLeast(1L)
+  if (storageInsight.totalBytes <= 0L) return
+  val totalBytes = storageInsight.totalBytes
   val usedBytes = storageInsight.usedBytes.coerceIn(0L, totalBytes)
   val freeBytes = storageInsight.freeBytes.coerceIn(0L, totalBytes)
   val occupiedPercent = ((usedBytes * 100.0) / totalBytes.toDouble()).toFloat().coerceIn(0f, 100f)

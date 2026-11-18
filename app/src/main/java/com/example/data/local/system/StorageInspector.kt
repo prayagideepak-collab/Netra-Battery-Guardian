@@ -67,7 +67,7 @@ class StorageInspector @Inject constructor(
           descriptionHi = "अनुपयोगी ऐप्स और ट्रैश को सुरक्षित रूप से हटाने के लिए Android स्टोरेज सेटिंग्स खोलें।",
           whyEn = "Keeping at least 10–15% storage free prevents system lag and flash wear.",
           whyHi = "कम से कम 10–15% जगह खाली रखने से फ़ोन धीमा नहीं होता और बैटरी भी बचती है।",
-          estimatedReclaimableMb = 500,
+          estimatedReclaimableMb = -1,
           target = StorageActionTarget.ANDROID_STORAGE_SETTINGS,
         )
     }
@@ -86,7 +86,7 @@ class StorageInspector @Inject constructor(
           descriptionHi = "ब्राउज़र में सैकड़ों MB कैश जमा हो सकता है। इसे सुरक्षित साफ़ करने के लिए ऐप स्टोरेज खोलें।",
           whyEn = "Clearing browser cache frees space without deleting bookmarks or saved passwords.",
           whyHi = "ब्राउज़र कैश साफ़ करने से बुकमार्क या पासवर्ड हटे बिना जगह खाली होती है।",
-          estimatedReclaimableMb = 250,
+          estimatedReclaimableMb = -1,
           target = StorageActionTarget.BROWSER_SETTINGS,
           packageHint = installedBrowser,
         )
@@ -103,7 +103,7 @@ class StorageInspector @Inject constructor(
           descriptionHi = "फ़ॉरवर्ड किए गए वीडियो और बड़ी फ़ाइलें सीधे WhatsApp स्टोरेज मैनेजर में जांचें।",
           whyEn = "Netra never deletes personal chat media automatically; you stay in full control.",
           whyHi = "नेत्रा कभी भी आपकी निजी चैट या मीडिया अपने आप नहीं हटाता; पूरा नियंत्रण आपके पास है।",
-          estimatedReclaimableMb = 400,
+          estimatedReclaimableMb = -1,
           target = StorageActionTarget.WHATSAPP_STORAGE,
           packageHint = whatsappPkg,
         )
@@ -118,7 +118,7 @@ class StorageInspector @Inject constructor(
         descriptionHi = "पुरानी APK, PDF या डुप्लिकेट फ़ाइलें जांचने के लिए Android फ़ाइल्स / डाउनलोड खोलें।",
         whyEn = "Manual confirmation ensures important documents are never removed accidentally.",
         whyHi = "मैन्युअल पुष्टि यह सुनिश्चित करती है कि कोई ज़रूरी दस्तावेज़ गलती से न हटे।",
-        estimatedReclaimableMb = 300,
+        estimatedReclaimableMb = -1,
         target = StorageActionTarget.DOWNLOADS_REVIEW,
       )
 
@@ -131,7 +131,7 @@ class StorageInspector @Inject constructor(
         descriptionHi = "बड़े कैश वाले ऐप्स देखने के लिए Android सेटिंग्स में ऐप्स को आकार के अनुसार देखें।",
         whyEn = "Android manages cross-app cache safely via system settings without root or intrusive permissions.",
         whyHi = "Android सिस्टम सेटिंग्स बिना रूट या अतिरिक्त अनुमति के सुरक्षित रूप से ऐप कैश संभालती है।",
-        estimatedReclaimableMb = 350,
+        estimatedReclaimableMb = -1,
         target = StorageActionTarget.MANAGE_APPS_SETTINGS,
       )
 

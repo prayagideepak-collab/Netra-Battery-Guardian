@@ -45,7 +45,7 @@ data class OptimizationRecommendation(
 
 data class BatteryOptimizationReport(
   val recommendations: List<OptimizationRecommendation> = emptyList(),
-  val healthScore: Int = 100,
+  val healthScore: Int = -1,
   val powerTier: AdaptivePowerTier = AdaptivePowerTier.NORMAL,
   val throttledDueToLowPower: Boolean = false,
   val evaluatedAtMillis: Long = 0L,
@@ -110,7 +110,7 @@ class BatteryHealthOptimizer @Inject constructor() {
           priority = OptimizationPriority.HIGH,
           titleEn = "Close or Restrict ${heavyApp.appName}",
           titleHi = "${heavyApp.appName} को बंद या सीमित करें",
-          adviceEn = "${heavyApp.appName} used ${heavyApp.foregroundMinutesToday}m today (~${heavyApp.estimatedDrainSharePercent.toInt()}% share). Open App Info to close it or set Battery usage to Restricted.",
+          adviceEn = "${heavyApp.appName} used ${heavyApp.foregroundMinutesToday}m today (foreground-use share ~${heavyApp.estimatedDrainSharePercent.toInt()}%, not measured battery drain). Open App Info to close it or set Battery usage to Restricted.",
           adviceHi = "${heavyApp.appName} ने आज ${heavyApp.foregroundMinutesToday} मिनट उपयोग किया (~${heavyApp.estimatedDrainSharePercent.toInt()}%)। ऐप जानकारी में इसे सीमित करें।",
           whyEn = "Manually closing or restricting high-consumption apps in Android settings cuts background wake-ups safely without root or fake task killers.",
           whyHi = "Android सेटिंग से भारी ऐप्स को सीमित करना सुरक्षित रूप से बैटरी बचाता है।",
@@ -124,7 +124,7 @@ class BatteryHealthOptimizer @Inject constructor() {
       // Doze mode & Battery Optimization posture check
       val hasAbnormalDrain = recentDischarges.any { it.abnormalDrainDetected }
       val hasUnrestrictedApps = topApps.any { !it.isBatteryOptimized }
-      if ((!telemetry.osBatterySaverOn && !telemetry.isCharging && telemetry.levelPercent <= 50) ||
+      if ((!telemetry.osBatterySaverOn && !telemetry.isCharging && telemetry.hasLevel && telemetry.levelPercent <= 50) ||
         hasAbnormalDrain ||
         hasUnrestrictedApps
       ) {
@@ -167,7 +167,7 @@ class BatteryHealthOptimizer @Inject constructor() {
             telemetry.poorCellularSignal ->
               "Weak cellular signal detected; modem boost drains battery rapidly. Enable Data Saver or use Wi-Fi."
             else ->
-              "${locationHeavyApp?.appName ?: "An app"} uses background location. Switch Location access to 'While using app'."
+              "${locationHeavyApp?.appName ?: "An app"} has location permission and recent foreground use. Background-location use is not verified; review its permission if needed."
           },
           adviceHi = "हॉटस्पॉट, कमज़ोर सिग्नल या बैकग्राउंड लोकेशन से बैटरी खपत बढ़ रही है; डेटा सेवर या लोकेशन सेटिंग सुधारें।",
           whyEn = "Cellular transmission and high-accuracy GPS polling are major off-screen power consumers.",
@@ -200,7 +200,7 @@ class BatteryHealthOptimizer @Inject constructor() {
           actionTarget = OptimizerActionTarget.BATTERY_SAVER_SETTINGS,
         )
       }
-    } else if (!telemetry.isCharging && telemetry.levelPercent < 15) {
+    } else if (!telemetry.isCharging && telemetry.hasLevel && telemetry.levelPercent < 15) {
       score -= 15
       items += OptimizationRecommendation(
         id = "opt_low_power_tier",
@@ -221,17 +221,17 @@ class BatteryHealthOptimizer @Inject constructor() {
       items += OptimizationRecommendation(
         id = "opt_all_good",
         priority = OptimizationPriority.GOOD,
-        titleEn = if (dozeState.isInDozeMode) "Doze Mode Power Savings Active" else "Battery & Thermal Posture Healthy",
+        titleEn = if (dozeState.isInDozeMode) "Doze Mode Power Savings Active" else "Available Observations Reviewed",
         titleHi = if (dozeState.isInDozeMode) "डोज़ मोड पावर बचत सक्रिय" else "बैटरी और तापमान स्थिति स्वस्थ है",
         adviceEn = if (dozeState.isInDozeMode) {
           "Device is in Doze mode; Netra has paused all non-essential background tasks automatically."
         } else {
-          "No high-drain apps, thermal spikes, or abnormal idle drain detected right now."
+          "No additional advice from the available observations. Battery health and unobserved app activity remain Unavailable."
         },
         adviceHi = if (dozeState.isInDozeMode) {
           "डिवाइस डोज़ मोड में है; सभी गैर-जरूरी बैकग्राउंड कार्य रुके हुए हैं।"
         } else {
-          "अभी कोई भारी ऐप ड्रेन, अधिक गर्मी या असामान्य खपत नहीं मिली।"
+          "उपलब्ध डेटा की समीक्षा की गई। बैटरी स्वास्थ्य और अनदेखी गतिविधि अनुपलब्ध हैं।"
         },
         whyEn = "Adaptive power tiers keep monitoring lightweight and only surface actions when needed.",
         whyHi = "अनुकूली पावर टियर केवल आवश्यकता होने पर ही सुझाव दिखाते हैं।",
@@ -243,7 +243,7 @@ class BatteryHealthOptimizer @Inject constructor() {
 
     return BatteryOptimizationReport(
       recommendations = items,
-      healthScore = score.coerceIn(10, 100),
+      healthScore = -1,
       powerTier = powerBudget.activeTier,
       throttledDueToLowPower = isLowPowerThrottled,
       evaluatedAtMillis = nowMillis,

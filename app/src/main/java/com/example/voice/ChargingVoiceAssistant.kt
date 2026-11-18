@@ -285,7 +285,7 @@ class ChargingVoiceAssistant @Inject constructor(
   fun announceDischargingMilestone(level: Int, prefs: UserPreferences, screenOn: Boolean) {
     if (!prefs.announceDischarging) return
     val isUrgentLow = level <= 5
-    if (isNightSilentActive(prefs) && !isUrgentLow) return
+    if (isNightSilentActive(prefs)) return
 
     val code = "D$level"
     val text =
@@ -309,8 +309,8 @@ class ChargingVoiceAssistant @Inject constructor(
       message = text,
       prefs = prefs,
       urgent = level <= 15,
-      bypassNightSilent = isUrgentLow,
-      bypassScreenOffRule = level <= 20,
+      bypassNightSilent = false,
+      bypassScreenOffRule = level <= 5,
       screenOn = screenOn,
       fallbackTitle = "Netra Battery $code",
       milestoneLevel = level,
