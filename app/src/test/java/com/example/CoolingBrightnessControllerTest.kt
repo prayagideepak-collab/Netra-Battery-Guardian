@@ -94,7 +94,7 @@ class CoolingBrightnessControllerTest {
     assertTrue(controller.state.value.restorePending)
     io.failMode = false
     CoolingBrightnessController(context, io).retryRestore()
-    assertEquals(200, io.b); assertEquals(1, io.m)
+    assertEquals(200, io.b); assertEquals(0, io.m)
   }
   @Test fun `failed tighter target restores prior dim and original mode rather than discarding ledger`() {
     val io = Io(); val controller = CoolingBrightnessController(context, io)
@@ -106,16 +106,17 @@ class CoolingBrightnessControllerTest {
     CoolingBrightnessController(context, io).retryRestore()
     assertEquals(200, io.b); assertEquals(1, io.m)
   }
-  @Test fun `unknown temperature recovers interrupted writes after process recreation`() {
+  @Test fun `ambiguous interrupted mode keeps possible later manual choice`() {
     val io = Io().apply { b = 200; m = 0 }
     context.getSharedPreferences("guardian_cooling_consent_v1", Context.MODE_PRIVATE).edit()
       .putBoolean("enabled", true).putInt("before_b", 200).putInt("before_m", 1)
       .putInt("previous_b", 200).putInt("applied_b", 95).putBoolean("complete", false).commit()
     val restarted = CoolingBrightnessController(context, io)
     assertFalse(restarted.reconcile(null))
-    assertEquals(200, io.b); assertEquals(1, io.m)
+    assertEquals(200, io.b); assertEquals(0, io.m)
     assertFalse(restarted.state.value.restorePending)
     assertTrue(restarted.state.value.enabled)
+    assertTrue(restarted.state.value.status.contains("unavailable"))
   }
   @Test fun `unknown temperature retries pending restore but preserves manual edit`() {
     val io = Io(); val controller = CoolingBrightnessController(context, io)
@@ -125,6 +126,30 @@ class CoolingBrightnessControllerTest {
     io.b = 210; io.failMode = false
     CoolingBrightnessController(context, io).reconcile(null)
     assertEquals(210, io.b); assertEquals(0, io.m)
+  }
+  @Test fun `earlier verified mode write cannot disprove a later manual choice`() {
+    val io = Io().apply { b = 200; m = 0 }
+    context.getSharedPreferences("guardian_cooling_consent_v1", Context.MODE_PRIVATE).edit()
+      .putBoolean("enabled", true).putInt("before_b", 200).putInt("before_m", 1)
+      .putInt("previous_b", 200).putInt("applied_b", 95).putBoolean("complete", false)
+      .putBoolean("mode_verified", true).commit()
+    CoolingBrightnessController(context, io).reconcile(null)
+    assertEquals(200, io.b); assertEquals(0, io.m)
+  }
+  @Test fun `synchronous apply witness is never reused for a later restore retry`() {
+    val io = Io(); val controller = CoolingBrightnessController(context, io)
+    controller.setEnabled(true)
+    io.failBrightness = true; io.failMode = false
+    // Immediate failed apply can restore its own mode before returning.
+    assertFalse(controller.reconcile(true))
+    assertEquals(1, io.m)
+    // A later partial journal must not inherit that in-memory rollback witness.
+    context.getSharedPreferences("guardian_cooling_consent_v1", Context.MODE_PRIVATE).edit()
+      .putInt("before_b", 200).putInt("before_m", 1).putInt("applied_b", 95)
+      .putBoolean("complete", false).commit()
+    io.m = 0; io.failBrightness = false
+    controller.retryRestore()
+    assertEquals(200, io.b); assertEquals(0, io.m)
   }
   @Test fun `stop restores originals without revoking consent while reset revokes it`() {
     val io = Io(); val controller = CoolingBrightnessController(context, io)
