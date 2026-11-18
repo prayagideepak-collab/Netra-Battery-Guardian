@@ -136,6 +136,21 @@ class CoolingBrightnessControllerTest {
     CoolingBrightnessController(context, io).reconcile(null)
     assertEquals(200, io.b); assertEquals(0, io.m)
   }
+  @Test fun `synchronous apply witness is never reused for a later restore retry`() {
+    val io = Io(); val controller = CoolingBrightnessController(context, io)
+    controller.setEnabled(true)
+    io.failBrightness = true; io.failMode = false
+    // Immediate failed apply can restore its own mode before returning.
+    assertFalse(controller.reconcile(true))
+    assertEquals(1, io.m)
+    // A later partial journal must not inherit that in-memory rollback witness.
+    context.getSharedPreferences("guardian_cooling_consent_v1", Context.MODE_PRIVATE).edit()
+      .putInt("before_b", 200).putInt("before_m", 1).putInt("applied_b", 95)
+      .putBoolean("complete", false).commit()
+    io.m = 0; io.failBrightness = false
+    controller.retryRestore()
+    assertEquals(200, io.b); assertEquals(0, io.m)
+  }
   @Test fun `stop restores originals without revoking consent while reset revokes it`() {
     val io = Io(); val controller = CoolingBrightnessController(context, io)
     controller.setEnabled(true); controller.reconcile(true)
