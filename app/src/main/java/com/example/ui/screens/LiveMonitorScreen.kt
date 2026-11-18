@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import com.example.domain.model.batteryLevelText
+import com.example.domain.model.telemetryText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -122,6 +124,7 @@ fun LiveMonitorContent(
     }
   val thermalStatusLabel =
     when {
+      !serviceState.temperatureCelsius.isFinite() -> "Unavailable"
       serviceState.temperatureCelsius >= 43f -> if (strings.isHindi) "अति गर्म" else "Critical Heat"
       serviceState.temperatureCelsius >= 40f -> if (strings.isHindi) "गर्म" else "Hot"
       serviceState.temperatureCelsius >= 36f -> if (strings.isHindi) "हल्का गर्म" else "Warm"
@@ -265,8 +268,8 @@ fun LiveMonitorContent(
             MetricTileCard(
               icon = Icons.Rounded.BatteryChargingFull,
               label = if (strings.isHindi) "बैटरी %" else "Battery Level",
-              value = "${serviceState.levelPercent}%",
-              sublabel = "${String.format(Locale.US, "%.2f", serviceState.voltageMv / 1000f)} V",
+              value = "${batteryLevelText(serviceState.levelPercent)}",
+              sublabel = "${telemetryText(if (serviceState.voltageMv > 0) serviceState.voltageMv / 1000f else Float.NaN, " V", 2)}",
               accent = SemanticCoolMint,
               modifier = Modifier
                 .weight(1f)
@@ -275,7 +278,7 @@ fun LiveMonitorContent(
             MetricTileCard(
               icon = Icons.Rounded.Thermostat,
               label = strings.temperature,
-              value = "${String.format(Locale.US, "%.1f", serviceState.temperatureCelsius)}°C",
+              value = "${telemetryText(serviceState.temperatureCelsius, "°C", 1)}",
               sublabel = thermalStatusLabel,
               accent = tempColor,
               modifier = Modifier
@@ -356,7 +359,7 @@ fun LiveMonitorContent(
               verticalAlignment = Alignment.CenterVertically,
             ) {
               Text(
-                text = "Current: ${serviceState.currentMa.toInt()} mA",
+                text = "Current: ${telemetryText(serviceState.currentMa, " mA", 0)}",
                 style = TelemetryMonoStyle,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
               )
@@ -440,7 +443,7 @@ fun LiveMonitorContent(
             if (latestHourlySnapshot != null) {
               Text(
                 text = "Latest Room Snapshot: ${latestHourlySnapshot.levelPercent}% • ${
-                  String.format(Locale.US, "%.1f", latestHourlySnapshot.temperatureCelsius)
+                  telemetryText(latestHourlySnapshot.temperatureCelsius)
                 }°C • ${latestHourlySnapshot.chargingStatus} (${timeFormat.format(Date(latestHourlySnapshot.timestampMillis))})",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,

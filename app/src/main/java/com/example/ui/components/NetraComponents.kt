@@ -100,6 +100,7 @@ fun AnimatedBatteryRing(
 
   val ringColor =
     when {
+      levelPercent !in 0..100 -> Color.Gray
       temperatureCelsius >= 43f -> SemanticCriticalRed
       temperatureCelsius >= 40f -> SemanticHotOrange
       levelPercent <= 15 -> SemanticCriticalRed
@@ -113,7 +114,7 @@ fun AnimatedBatteryRing(
   Box(
     modifier = modifier
       .size(176.dp)
-      .semantics { contentDescription = "Battery $levelPercent percent, $statusLabel" },
+      .semantics { contentDescription = if (levelPercent in 0..100) "Battery $levelPercent percent, $statusLabel" else "Battery level unavailable" },
     contentAlignment = Alignment.Center,
   ) {
     Canvas(modifier = Modifier.fillMaxSize().padding(10.dp)) {
@@ -154,8 +155,10 @@ fun AnimatedBatteryRing(
         )
       }
       Text(
-        text = "$levelPercent%",
-        style = MaterialTheme.typography.displayLarge,
+        text = if (levelPercent in 0..100) "$levelPercent%" else "Unavailable",
+        style = if (levelPercent in 0..100) MaterialTheme.typography.displayLarge else MaterialTheme.typography.titleLarge,
+        maxLines = 1,
+        softWrap = false,
         color = MaterialTheme.colorScheme.onSurface,
       )
       Text(
@@ -336,6 +339,7 @@ fun StatusPill(
 
 fun zoneColor(zone: TemperatureZone): Color =
   when (zone) {
+    TemperatureZone.UNAVAILABLE -> Color.Gray
     TemperatureZone.TOO_COLD, TemperatureZone.COLD -> SemanticIceCyan
     TemperatureZone.NORMAL -> SemanticCoolMint
     TemperatureZone.WARM -> SemanticWarmAmber

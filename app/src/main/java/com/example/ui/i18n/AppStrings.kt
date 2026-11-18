@@ -54,6 +54,7 @@ class AppStrings(private val language: AppLanguage) {
 
   fun speedLabel(speed: ChargingSpeedClass): String =
     when (speed) {
+      ChargingSpeedClass.UNAVAILABLE -> "Unavailable"
       ChargingSpeedClass.NOT_CHARGING -> if (isHindi) "चार्जिंग नहीं" else "Not Charging"
       ChargingSpeedClass.DISCHARGING_WHILE_PLUGGED ->
         if (isHindi) "चार्जर लगा है पर घट रही है" else "Discharging While Plugged"
@@ -79,6 +80,7 @@ class AppStrings(private val language: AppLanguage) {
 
   fun zoneLabel(zone: TemperatureZone): String =
     when (zone) {
+      TemperatureZone.UNAVAILABLE -> "Unavailable"
       TemperatureZone.TOO_COLD -> if (isHindi) "बहुत ठंडा (<0°C)" else "Too Cold (<0°C)"
       TemperatureZone.COLD -> if (isHindi) "ठंडा (0–15°C)" else "Cold (0–15°C)"
       TemperatureZone.NORMAL -> if (isHindi) "सामान्य (16–35°C)" else "Ideal / Normal"

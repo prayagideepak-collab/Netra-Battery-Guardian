@@ -23,9 +23,9 @@ import javax.inject.Singleton
 
 data class ThermalMonitorState(
   val isRegistered: Boolean = false,
-  val temperatureCelsius: Float = 0f,
-  val voltageMv: Int = 0,
-  val zone: TemperatureZone = TemperatureZone.NORMAL,
+  val temperatureCelsius: Float = Float.NaN,
+  val voltageMv: Int = -1,
+  val zone: TemperatureZone = TemperatureZone.UNAVAILABLE,
   val activeTier: AdaptivePowerTier = AdaptivePowerTier.NORMAL,
   val isThermalThrottled: Boolean = false,
   val lastNotifiedZone: TemperatureZone? = null,

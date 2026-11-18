@@ -159,13 +159,14 @@ class ChargingVoiceAssistant @Inject constructor(
         AppLanguage.ENGLISH -> {
           val mode =
             when (speedClass) {
+              ChargingSpeedClass.UNAVAILABLE -> "Charging speed unavailable."
               ChargingSpeedClass.SLOW -> "Slow charging started."
               ChargingSpeedClass.STANDARD -> "Normal charging started."
               ChargingSpeedClass.FAST -> "Fast charging started."
               ChargingSpeedClass.SUPER_FAST -> "Super fast charging started."
               ChargingSpeedClass.ULTRA_FAST -> "Ultra fast charging started."
               ChargingSpeedClass.EXTREME_FAST -> "Extreme fast charging started."
-              ChargingSpeedClass.DISCHARGING_WHILE_PLUGGED -> "High phone usage is reducing effective charging speed."
+              ChargingSpeedClass.DISCHARGING_WHILE_PLUGGED -> "Observed net discharge while plugged in."
               ChargingSpeedClass.NOT_CHARGING -> "Charging detected."
             }
           "Charger connected. $mode"
@@ -173,13 +174,14 @@ class ChargingVoiceAssistant @Inject constructor(
         AppLanguage.HINDI -> {
           val mode =
             when (speedClass) {
+              ChargingSpeedClass.UNAVAILABLE -> "Charging speed unavailable."
               ChargingSpeedClass.SLOW -> "धीमी चार्जिंग शुरू हुई।"
               ChargingSpeedClass.STANDARD -> "सामान्य चार्जिंग शुरू हुई।"
               ChargingSpeedClass.FAST -> "तेज़ चार्जिंग शुरू हुई।"
               ChargingSpeedClass.SUPER_FAST -> "सुपर फ़ास्ट चार्जिंग शुरू हुई।"
               ChargingSpeedClass.ULTRA_FAST -> "अल्ट्रा फ़ास्ट चार्जिंग शुरू हुई।"
               ChargingSpeedClass.EXTREME_FAST -> "एक्सट्रीम फ़ास्ट चार्जिंग शुरू हुई।"
-              ChargingSpeedClass.DISCHARGING_WHILE_PLUGGED -> "ज़्यादा उपयोग के कारण चार्जिंग धीमी है।"
+              ChargingSpeedClass.DISCHARGING_WHILE_PLUGGED -> "चार्जर जुड़ा होने पर भी बैटरी घट रही है।"
               ChargingSpeedClass.NOT_CHARGING -> "चार्जिंग शुरू हुई।"
             }
           "चार्जर जुड़ गया है। $mode"
@@ -187,13 +189,14 @@ class ChargingVoiceAssistant @Inject constructor(
         AppLanguage.HINGLISH -> {
           val mode =
             when (speedClass) {
+              ChargingSpeedClass.UNAVAILABLE -> "Charging speed unavailable."
               ChargingSpeedClass.SLOW -> "Slow charging shuru ho gayi hai."
               ChargingSpeedClass.STANDARD -> "Normal charging shuru ho gayi hai."
               ChargingSpeedClass.FAST -> "Fast charging shuru ho gayi hai."
               ChargingSpeedClass.SUPER_FAST -> "Super fast charging shuru ho gayi hai."
               ChargingSpeedClass.ULTRA_FAST -> "Ultra fast charging shuru ho gayi hai."
               ChargingSpeedClass.EXTREME_FAST -> "Extreme fast charging shuru ho gayi hai."
-              ChargingSpeedClass.DISCHARGING_WHILE_PLUGGED -> "Heavy use ki wajah se charging slow hai."
+              ChargingSpeedClass.DISCHARGING_WHILE_PLUGGED -> "Charger laga hai, lekin battery ghat rahi hai."
               ChargingSpeedClass.NOT_CHARGING -> "Charging shuru ho gayi hai."
             }
           "Charger connect ho gaya hai. $mode"

@@ -1,5 +1,7 @@
 package com.example.service
 
+import com.example.domain.model.batteryLevelText
+import com.example.domain.model.telemetryText
 import android.Manifest
 import android.app.Service
 import android.content.BroadcastReceiver
@@ -138,9 +140,9 @@ class BatteryGuardianService : Service() {
       val diag = chargingClassifier.diagnose(telemetry)
       val statusLine =
         if (telemetry.isPlugged) {
-          "${telemetry.levelPercent}% • ${String.format("%.1f", diag.netPowerWatts)} W • ${String.format("%.1f", telemetry.temperatureCelsius)}°C"
+          "${batteryLevelText(telemetry.levelPercent)} • ${telemetryText(diag.netPowerWatts, " W")} • ${telemetryText(telemetry.temperatureCelsius, "°C", 1)}"
         } else {
-          "${telemetry.levelPercent}% • ${output.activeProfile.name} • ${String.format("%.1f", telemetry.temperatureCelsius)}°C"
+          "${batteryLevelText(telemetry.levelPercent)} • ${output.activeProfile.name} • ${telemetryText(telemetry.temperatureCelsius, "°C", 1)}"
         }
       val notif = notificationHelper.buildGuardianForegroundNotification("Netra Guardian", statusLine)
       val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
