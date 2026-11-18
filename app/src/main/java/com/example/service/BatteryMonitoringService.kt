@@ -69,10 +69,6 @@ class BatteryMonitoringService : Service() {
   @Inject lateinit var thermalMonitor: ThermalMonitor
   @Inject lateinit var dozeModeMonitor: DozeModeMonitor
   @Inject lateinit var batteryLifecycleEstimator: BatteryLifecycleEstimator
-  @Inject lateinit var dozeModeMonitor: DozeModeMonitor
-  @Inject lateinit var batteryLifecycleEstimator: BatteryLifecycleEstimator
-  @Inject lateinit var dozeModeMonitor: DozeModeMonitor
-  @Inject lateinit var batteryLifecycleEstimator: BatteryLifecycleEstimator
 
   private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
   private var receiverRegistered = false
@@ -93,8 +89,6 @@ class BatteryMonitoringService : Service() {
     _serviceState.update { it.copy(isRunning = true) }
     notificationHelper.createChannels()
     thermalMonitor.register(ThermalMonitor.OWNER_MONITORING_SERVICE)
-    dozeModeMonitor.register(DozeModeMonitor.OWNER_MONITORING_SERVICE)
-    dozeModeMonitor.register(DozeModeMonitor.OWNER_MONITORING_SERVICE)
     dozeModeMonitor.register(DozeModeMonitor.OWNER_MONITORING_SERVICE)
     startForegroundCompat(
       title = "Netra Battery Monitor",
@@ -258,7 +252,11 @@ class BatteryMonitoringService : Service() {
         }V • $chargingStatusLabel"
       val notification = notificationHelper.buildGuardianForegroundNotification("Netra Battery Monitor", statusSummary)
       val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-      nm?.notify(NotificationHelper.ID_GUARDIAN_SERVICE, notification)
+      try {
+        nm?.notify(NotificationHelper.ID_GUARDIAN_SERVICE, notification)
+      } catch (_: SecurityException) {
+        // Notifications may be denied/revoked; keep monitoring state local.
+      }
     }
   }
 

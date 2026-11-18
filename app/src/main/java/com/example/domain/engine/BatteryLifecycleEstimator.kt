@@ -73,6 +73,18 @@ class BatteryLifecycleEstimator @Inject constructor(
         statusCode == BatteryManager.BATTERY_STATUS_FULL ||
         (intent == null && (batteryManager?.isCharging == true))
 
+    // A discharging observation must not seed a charging-health baseline or
+    // cycle state. Wait for the charging gate before deriving any capacity.
+    if (!isCharging) {
+      return@withLock BatteryLifecycleResult(
+        loggedNewEntry = false,
+        alreadyLoggedToday = false,
+        skippedReason = "Skipped: device is not charging",
+        latestEntry = _latestEntry.value,
+      )
+    }
+
+
     val chargeCounterRaw = batteryManager?.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER) ?: -1L
     val chargeCounterUah = if (chargeCounterRaw > 0L) chargeCounterRaw else -1L
     val estimatedCapacityMah =
@@ -106,14 +118,6 @@ class BatteryLifecycleEstimator @Inject constructor(
       )
     }
 
-    if (!isCharging) {
-      return@withLock BatteryLifecycleResult(
-        loggedNewEntry = false,
-        alreadyLoggedToday = false,
-        skippedReason = "Skipped: device is not charging",
-        latestEntry = _latestEntry.value,
-      )
-    }
 
     val dayBucket = nowMillis / MILLIS_PER_DAY
     val dao = appDatabase.netraDao()

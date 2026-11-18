@@ -29,4 +29,11 @@ class ExampleRobolectricTest {
     val permissions = info.requestedPermissions?.toList() ?: emptyList()
     assertFalse("App must be 100% offline with no INTERNET permission", permissions.contains(Manifest.permission.INTERNET))
   }
+  @Test
+  fun `backup and cleartext stay disabled in merged manifest`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val flags = context.applicationInfo.flags
+    assertFalse(flags and android.content.pm.ApplicationInfo.FLAG_ALLOW_BACKUP != 0)
+    assertFalse(flags and android.content.pm.ApplicationInfo.FLAG_USES_CLEARTEXT_TRAFFIC != 0)
+  }
 }

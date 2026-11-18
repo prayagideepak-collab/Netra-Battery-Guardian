@@ -119,7 +119,11 @@ class NotificationHelper @Inject constructor(
       builder.addAction(0, actionLabel, pi)
     }
 
-    runCatching { NotificationManagerCompat.from(context).notify(id, builder.build()) }
+    try {
+      NotificationManagerCompat.from(context).notify(id, builder.build())
+    } catch (_: SecurityException) {
+      // Permission can be revoked between the check and notification delivery.
+    }
   }
 
   fun postCriticalAlert(id: Int, title: String, body: String) {
@@ -134,7 +138,11 @@ class NotificationHelper @Inject constructor(
         .setAutoCancel(true)
         .setContentIntent(mainActivityPendingIntent())
         .build()
-    runCatching { NotificationManagerCompat.from(context).notify(id, notification) }
+    try {
+      NotificationManagerCompat.from(context).notify(id, notification)
+    } catch (_: SecurityException) {
+      // A denied/revoked notification grant must not crash local monitoring.
+    }
   }
 
   private fun mainActivityPendingIntent(): PendingIntent {
