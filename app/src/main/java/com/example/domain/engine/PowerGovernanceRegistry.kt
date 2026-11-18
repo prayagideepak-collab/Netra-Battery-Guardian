@@ -68,6 +68,13 @@ object PowerGovernanceRegistry {
       measuredImpact = "0% background drain when not visible",
     ),
     FeaturePowerGate(
+      featureName = "Idle Battery Snapshot Persistence (WorkManager)",
+      runsInTier = "Idle Maintenance Window Only (RequiresDeviceIdle + BatteryNotLow)",
+      maxWakeupsPerHour = 1,
+      networkCallsPerHour = 0,
+      measuredImpact = "<0.05% per hourly idle Room checkpoint",
+    ),
+    FeaturePowerGate(
       featureName = "Location Power Saver (Trip Mode FGS)",
       runsInTier = "User-initiated Trip only (Normal/Saver; GPS off in Survival)",
       maxWakeupsPerHour = 4,

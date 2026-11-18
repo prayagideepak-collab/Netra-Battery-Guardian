@@ -66,6 +66,7 @@ import com.example.ui.screens.AppsScreen
 import com.example.ui.screens.BatteryScreen
 import com.example.ui.screens.HeatScreen
 import com.example.ui.screens.HomeScreen
+import com.example.ui.screens.LiveMonitorScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.StorageScreen
 import com.example.ui.theme.NetraBatteryTheme
@@ -78,6 +79,7 @@ import kotlinx.serialization.Serializable
 @Serializable object AppsRoute
 @Serializable object StorageRoute
 @Serializable object SettingsRoute
+@Serializable object LiveMonitorRoute
 
 private data class NavTab(
   val route: Any,
@@ -249,10 +251,23 @@ private fun NetraRootScaffold(
               onOpenBatteryTab = { navigateTo(BatteryRoute) },
               onOpenHeatTab = { navigateTo(HeatRoute) },
               onOpenAppsTab = { navigateTo(AppsRoute) },
+              onOpenLiveMonitor = { navController.navigate(LiveMonitorRoute) },
             )
           }
           composable<BatteryRoute> {
-            BatteryScreen(state = state, strings = strings)
+            BatteryScreen(
+              state = state,
+              strings = strings,
+              onOpenLiveMonitor = { navController.navigate(LiveMonitorRoute) },
+            )
+          }
+          composable<LiveMonitorRoute> {
+            LiveMonitorScreen(
+              latestHourlySnapshot = state.hourlySnapshots.firstOrNull(),
+              strings = strings,
+              onNavigateBack = { navController.navigateUp() },
+              onOpenBatteryHistory = { navigateTo(BatteryRoute) },
+            )
           }
           composable<HeatRoute> {
             HeatScreen(

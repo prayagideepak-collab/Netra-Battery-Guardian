@@ -22,6 +22,7 @@ import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.LocationOff
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Sensors
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -65,6 +66,7 @@ fun HomeScreen(
   onOpenBatteryTab: () -> Unit,
   onOpenHeatTab: () -> Unit,
   onOpenAppsTab: () -> Unit,
+  onOpenLiveMonitor: () -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   val t = state.telemetry
@@ -264,6 +266,13 @@ fun HomeScreen(
             label = { Text(strings.quickStorageClean) },
             leadingIcon = { Icon(Icons.Rounded.CleaningServices, contentDescription = null, modifier = Modifier.size(18.dp)) },
             modifier = Modifier.testTag("quick_storage_clean"),
+          )
+          FilterChip(
+            selected = false,
+            onClick = onOpenLiveMonitor,
+            label = { Text(strings.liveServiceAction) },
+            leadingIcon = { Icon(Icons.Rounded.Sensors, contentDescription = null, modifier = Modifier.size(18.dp)) },
+            modifier = Modifier.testTag("open_live_monitor_button"),
           )
         }
       }

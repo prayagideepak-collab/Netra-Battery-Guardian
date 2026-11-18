@@ -1,19 +1,26 @@
 package com.example.service
 
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
 import androidx.hilt.work.HiltWorker
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.PeriodicWorkRequest
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import com.example.data.local.db.AppDatabase
+import com.example.data.local.db.BatterySnapshot
 import com.example.data.local.prefs.PreferencesRepository
 import com.example.data.local.system.BatteryTelemetryCollector
 import com.example.data.local.system.StorageInspector
 import com.example.data.repository.BatteryHistoryRepository
+import com.example.domain.engine.ChargingSpeedClassifier
 import com.example.domain.engine.SelfHealingSupervisor
 import com.example.domain.model.LogCategory
 import com.example.domain.model.LogSeverity
@@ -169,14 +176,95 @@ class GuardianHealthCheckWorker @AssistedInject constructor(
   }
 }
 
+/**
+ * Low-power periodic WorkManager task that persists a BatterySnapshot to Room
+ * strictly when the device is idle (Constraints.setRequiresDeviceIdle = true).
+ */
+@HiltWorker
+class IdleBatteryPersistenceWorker @AssistedInject constructor(
+  @Assisted appContext: Context,
+  @Assisted params: WorkerParameters,
+  private val telemetryCollector: BatteryTelemetryCollector,
+  private val preferencesRepository: PreferencesRepository,
+  private val chargingClassifier: ChargingSpeedClassifier,
+  private val appDatabase: AppDatabase,
+) : CoroutineWorker(appContext, params) {
+
+  override suspend fun doWork(): Result {
+    val prefs = preferencesRepository.preferences.first()
+    val stickyBatteryIntent = applicationContext.registerReceiver(
+      null,
+      IntentFilter(Intent.ACTION_BATTERY_CHANGED),
+    )
+    val telemetry = telemetryCollector.collect(
+      intentOverride = stickyBatteryIntent,
+      observedCapacityFallbackMah = prefs.observedCapacityMah,
+      isAppInForeground = false,
+    )
+    val diagnosis = chargingClassifier.diagnose(telemetry)
+    val statusCode =
+      stickyBatteryIntent?.getIntExtra(
+        BatteryManager.EXTRA_STATUS,
+        BatteryManager.BATTERY_STATUS_UNKNOWN,
+      ) ?: BatteryManager.BATTERY_STATUS_UNKNOWN
+    val statusLabel =
+      when (statusCode) {
+        BatteryManager.BATTERY_STATUS_CHARGING -> "CHARGING"
+        BatteryManager.BATTERY_STATUS_DISCHARGING -> "DISCHARGING"
+        BatteryManager.BATTERY_STATUS_FULL -> "FULL"
+        BatteryManager.BATTERY_STATUS_NOT_CHARGING -> "NOT_CHARGING"
+        else -> if (telemetry.isCharging) "CHARGING" else "DISCHARGING"
+      }
+
+    appDatabase.batteryDao().insertSnapshot(
+      BatterySnapshot(
+        timestampMillis = telemetry.timestampMillis,
+        levelPercent = telemetry.levelPercent,
+        voltageMv = telemetry.voltageMv,
+        temperatureCelsius = telemetry.temperatureCelsius,
+        currentMa = telemetry.currentMa,
+        powerWatts = diagnosis.netPowerWatts,
+        isCharging = telemetry.isCharging,
+        chargingStatus = statusLabel,
+        isPlugged = telemetry.isPlugged,
+        plugType = telemetry.plugType.name,
+        screenOn = telemetry.screenOn,
+        thermalLevel = telemetry.thermalLevel.name,
+        activeProfile = "IDLE_PERIODIC",
+        isHourlyCheckpoint = true,
+      )
+    )
+    return Result.success()
+  }
+}
+
 object NetraWorkScheduler {
-  private const val WORK_STORAGE_AUDIT = "netra_storage_audit"
-  private const val WORK_DATA_RETENTION = "netra_data_retention"
-  private const val WORK_SCREEN_OFF_DRAIN = "netra_screen_off_drain"
-  private const val WORK_HEALTH_CHECK = "netra_health_check"
+  const val WORK_STORAGE_AUDIT = "netra_storage_audit"
+  const val WORK_DATA_RETENTION = "netra_data_retention"
+  const val WORK_SCREEN_OFF_DRAIN = "netra_screen_off_drain"
+  const val WORK_HEALTH_CHECK = "netra_health_check"
+  const val WORK_IDLE_BATTERY_PERSISTENCE = "netra_idle_battery_persistence"
+
+  fun buildIdlePersistenceRequest(): PeriodicWorkRequest {
+    val idleConstraints =
+      Constraints.Builder()
+        .setRequiresDeviceIdle(true)
+        .setRequiresBatteryNotLow(true)
+        .build()
+
+    return PeriodicWorkRequestBuilder<IdleBatteryPersistenceWorker>(1, TimeUnit.HOURS)
+      .setConstraints(idleConstraints)
+      .build()
+  }
 
   fun schedulePeriodicMaintenance(context: Context) {
     val wm = WorkManager.getInstance(context)
+
+    wm.enqueueUniquePeriodicWork(
+      WORK_IDLE_BATTERY_PERSISTENCE,
+      ExistingPeriodicWorkPolicy.KEEP,
+      buildIdlePersistenceRequest(),
+    )
 
     val storageConstraints =
       Constraints.Builder()

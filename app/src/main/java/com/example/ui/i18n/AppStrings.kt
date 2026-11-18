@@ -49,6 +49,8 @@ class AppStrings(private val language: AppLanguage) {
   val quickLocationSaver: String get() = if (isHindi) "लोकेशन सेवर" else "Location Saver"
   val quickNightSilent: String get() = if (isHindi) "नाइट साइलेंट" else "Night Silent"
   val quickStorageClean: String get() = if (isHindi) "स्टोरेज क्लीन" else "Storage Clean"
+  val liveMonitorTitle: String get() = if (isHindi) "लाइव सर्विस मॉनिटर" else "Live Service Monitor"
+  val liveServiceAction: String get() = if (isHindi) "लाइव मॉनिटर" else "Live Service"
 
   fun speedLabel(speed: ChargingSpeedClass): String =
     when (speed) {
