@@ -189,7 +189,6 @@ class BatteryHistoryRepository @Inject constructor(
       open.copy(
         endTimeMillis = telemetry.timestampMillis,
         endLevel = if (telemetry.hasLevel) telemetry.levelPercent else -1,
-        percentageGained = if (telemetry.hasLevel && open.startLevel in 0..100) (telemetry.levelPercent - open.startLevel).coerceAtLeast(0) else 0,
         minTempCelsius = knownMin(open.minTempCelsius, telemetry.temperatureCelsius),
         maxTempCelsius = knownMax(open.maxTempCelsius, telemetry.temperatureCelsius),
       )
