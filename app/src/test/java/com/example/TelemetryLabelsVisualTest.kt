@@ -43,4 +43,24 @@ class TelemetryLabelsVisualTest {
       bitmap.recycle()
     }
   }
+  @Test fun partialSensorsKeepIndependentChartPoints() {
+    val samples = listOf(
+      com.example.data.local.db.BatterySnapshot(timestampMillis = 1000L, levelPercent = 50, temperatureCelsius = 30f, voltageMv = -1, currentMa = 0f, powerWatts = 0f, isCharging = false, chargingStatus = "UNKNOWN", isPlugged = false, plugType = "NONE", screenOn = true, thermalLevel = "NONE", activeProfile = "NORMAL"),
+      com.example.data.local.db.BatterySnapshot(timestampMillis = 2000L, levelPercent = 50, temperatureCelsius = Float.NEGATIVE_INFINITY, voltageMv = 4000, currentMa = 0f, powerWatts = 0f, isCharging = false, chargingStatus = "UNKNOWN", isPlugged = false, plugType = "NONE", screenOn = true, thermalLevel = "NONE", activeProfile = "NORMAL"),
+    )
+    rule.setContent { NetraBatteryTheme { androidx.compose.material3.Surface {
+      com.example.ui.components.HourlyTempVoltageChart(samples)
+    } } }
+    rule.onNodeWithTag("hourly_temp_voltage_canvas").assertContentDescriptionContains("1 temperature and 1 voltage points", substring = true)
+    rule.runOnIdle {
+      val view = rule.activity.window.decorView
+      val bitmap = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
+      view.draw(android.graphics.Canvas(bitmap))
+      java.io.File("build/reports/guardian-ui/partial-sensors-chart.png").apply { parentFile?.mkdirs() }.outputStream().use {
+        bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+      }
+      bitmap.recycle()
+    }
+  }
+
 }

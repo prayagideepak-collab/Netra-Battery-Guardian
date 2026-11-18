@@ -53,6 +53,23 @@ class ObservedTelemetryTest {
     } finally { db.close() }
   }
 
+  @Test fun `disconnect with unknown level closes session rather than merging next charge`() = kotlinx.coroutines.runBlocking {
+    val context = ApplicationProvider.getApplicationContext<Application>()
+    val db = androidx.room.Room.inMemoryDatabaseBuilder(context, com.example.data.local.db.AppDatabase::class.java).allowMainThreadQueries().build()
+    try {
+      val repo = com.example.data.repository.BatteryHistoryRepository(db.netraDao(), db.batteryDao())
+      repo.startOrUpdateChargingSession(BatteryTelemetry(timestampMillis = 1000, levelPercent = 50), ChargingSpeedClass.UNAVAILABLE, Float.NaN)
+      repo.closeOpenChargingSession(BatteryTelemetry(timestampMillis = 2000))
+      repo.startOrUpdateChargingSession(BatteryTelemetry(timestampMillis = 3000, levelPercent = 55), ChargingSpeedClass.UNAVAILABLE, Float.NaN)
+      val sessions = repo.getChargingSessionsForExport()
+      assertEquals(2, sessions.size)
+      val closed = sessions.first { it.startTimeMillis == 1000L }
+      assertEquals(2000L, closed.endTimeMillis)
+      assertEquals(-1, closed.endLevel)
+      assertEquals("Unavailable", telemetryText(closed.maxPowerWatts))
+    } finally { db.close() }
+  }
+
   @Test fun `microamps and sign are never guessed from magnitude or charging status`() {
     val context = ApplicationProvider.getApplicationContext<Application>()
     val manager = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager

@@ -121,12 +121,11 @@ class BatteryHistoryRepository @Inject constructor(
   }
 
   suspend fun closeOpenChargingSession(telemetry: BatteryTelemetry) {
-    if (!telemetry.hasLevel) return
     val open = dao.getOpenChargingSession() ?: return
     dao.updateChargingSession(
       open.copy(
         endTimeMillis = telemetry.timestampMillis,
-        endLevel = telemetry.levelPercent,
+        endLevel = if (telemetry.hasLevel) telemetry.levelPercent else -1,
         peakTempCelsius = knownMax(open.peakTempCelsius, telemetry.temperatureCelsius),
       )
     )
@@ -170,12 +169,11 @@ class BatteryHistoryRepository @Inject constructor(
   }
 
   suspend fun closeOpenDischargeSession(telemetry: BatteryTelemetry) {
-    if (!telemetry.hasLevel) return
     val open = dao.getOpenDischargeSession() ?: return
     dao.updateDischargeSession(
       open.copy(
         endTimeMillis = telemetry.timestampMillis,
-        endLevel = telemetry.levelPercent,
+        endLevel = if (telemetry.hasLevel) telemetry.levelPercent else -1,
         minTempCelsius = knownMin(open.minTempCelsius, telemetry.temperatureCelsius),
         maxTempCelsius = knownMax(open.maxTempCelsius, telemetry.temperatureCelsius),
       )

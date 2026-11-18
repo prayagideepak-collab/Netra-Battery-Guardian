@@ -1,6 +1,7 @@
 package com.example.data.local.system
 
 import com.example.domain.model.telemetryText
+import com.example.domain.model.batteryLevelText
 import android.content.Context
 import android.graphics.Color
 import android.graphics.Paint
@@ -117,7 +118,7 @@ class LocalReportExporter @Inject constructor(
       y += 18f
       chargingSessions.take(6).forEach { cs ->
         canvas.drawText(
-          "${dateFormatter.format(Date(cs.startTimeMillis))}: ${cs.startLevel}% -> ${cs.endLevel}% | ${cs.speedClass} (${
+          "${dateFormatter.format(Date(cs.startTimeMillis))}: ${batteryLevelText(cs.startLevel)} -> ${batteryLevelText(cs.endLevel)} | ${cs.speedClass} (${
             telemetryText(cs.maxPowerWatts)
           } W max, ${telemetryText(cs.peakTempCelsius)}°C peak)",
           36f,

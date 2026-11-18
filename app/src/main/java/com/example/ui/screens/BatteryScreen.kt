@@ -402,11 +402,11 @@ fun BatteryScreen(
       items(state.chargingSessions.take(8)) { cs ->
         GuardianCard(modifier = Modifier.widthIn(max = 720.dp)) {
           Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("${cs.startLevel}% → ${cs.endLevel}% (${cs.plugType})", style = MaterialTheme.typography.titleMedium)
+            Text("${batteryLevelText(cs.startLevel)} → ${batteryLevelText(cs.endLevel)} (${cs.plugType})", style = MaterialTheme.typography.titleMedium)
             StatusPill(cs.speedClass, SemanticIceCyan)
           }
           Text(
-            text = "${dateFmt.format(Date(cs.startTimeMillis))} • Max ${String.format("%.1f", cs.maxPowerWatts)} W • Peak ${String.format("%.1f", cs.peakTempCelsius)}°C",
+            text = "${dateFmt.format(Date(cs.startTimeMillis))} • Max ${telemetryText(cs.maxPowerWatts, " W")} • Peak ${telemetryText(cs.peakTempCelsius, "°C")}",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
@@ -437,13 +437,13 @@ fun BatteryScreen(
       items(state.dischargeSessions.take(8)) { ds ->
         GuardianCard(modifier = Modifier.widthIn(max = 720.dp)) {
           Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("${ds.startLevel}% → ${ds.endLevel}%", style = MaterialTheme.typography.titleMedium)
+            Text("${batteryLevelText(ds.startLevel)} → ${batteryLevelText(ds.endLevel)}", style = MaterialTheme.typography.titleMedium)
             if (ds.abnormalDrainDetected) {
               StatusPill("Abnormal Drain", SemanticWarmAmber)
             }
           }
           Text(
-            text = "${dateFmt.format(Date(ds.startTimeMillis))} • Screen On ${ds.screenOnMinutes}m / Off ${ds.screenOffMinutes}m • Temp ${String.format("%.1f", ds.minTempCelsius)}–${String.format("%.1f", ds.maxTempCelsius)}°C",
+            text = "${dateFmt.format(Date(ds.startTimeMillis))} • Screen On ${ds.screenOnMinutes}m / Off ${ds.screenOffMinutes}m • Temp ${telemetryText(ds.minTempCelsius, "°C")} to ${telemetryText(ds.maxTempCelsius, "°C")}",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
