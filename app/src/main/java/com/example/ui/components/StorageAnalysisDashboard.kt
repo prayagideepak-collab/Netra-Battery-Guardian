@@ -475,7 +475,7 @@ fun StorageAnalysisDashboard(
       verticalAlignment = Alignment.CenterVertically,
     ) {
       Text(
-        text = if (isHindi) "शीर्ष स्टोरेज खपत करने वाली ऐप श्रेणियाँ" else "Top Storage-Consuming App Categories",
+        text = if (isHindi) "मापा कैश और अवर्गीकृत उपयोग" else "Measured Cache & Unattributed Usage",
         style = MaterialTheme.typography.titleSmall,
       )
       Text(

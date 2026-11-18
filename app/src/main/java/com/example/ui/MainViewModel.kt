@@ -667,6 +667,7 @@ class MainViewModel @Inject constructor(
 
   fun clearAllLocalData() {
     viewModelScope.launch {
+      val cleared = runCatching {
       telemetryCollector.setCoolingBrightnessAllowed(false)
       com.example.widget.GuardianBatteryWidget.clear(app)
       kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -675,7 +676,8 @@ class MainViewModel @Inject constructor(
       historyRepository.clearAllLocalData()
       reportExporter.clearPrivateReports()
       preferencesRepository.resetAllPreferences()
-      _uiState.update { it.copy(lastCsvExportPath = null, statusMessage = "All local Netra data cleared.") }
+      }.isSuccess
+      _uiState.update { it.copy(lastCsvExportPath = null, statusMessage = if (cleared) "Local history and private reports cleared. Monitoring can record new readings." else "Some local data could not be cleared. Please try again.") }
       refreshNow(forceSnapshot = true)
     }
   }

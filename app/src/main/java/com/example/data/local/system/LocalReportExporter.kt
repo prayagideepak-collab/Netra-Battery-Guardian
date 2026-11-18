@@ -40,7 +40,8 @@ class LocalReportExporter @Inject constructor(
   private val reportMutex = Mutex()
 
   suspend fun clearPrivateReports() = reportMutex.withLock {
-    File(context.filesDir, "NetraReports").deleteRecursively()
+    val reports = File(context.filesDir, "NetraReports")
+    check(!reports.exists() || reports.deleteRecursively()) { "Private reports could not be cleared" }
     Unit
   }
 

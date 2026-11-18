@@ -41,7 +41,7 @@ class AppStrings(private val language: AppLanguage) {
 
   val screenOnVsOff: String get() = if (isHindi) "स्क्रीन ऑन बनाम ऑफ़" else "Screen-On vs Screen-Off"
   val todaysDrainGraph: String get() = if (isHindi) "आज का बैटरी ग्राफ़" else "Today's Battery Trend"
-  val topAppsTitle: String get() = if (isHindi) "शीर्ष बैटरी उपयोग ऐप्स" else "Top Battery-Consuming Apps"
+  val topAppsTitle: String get() = if (isHindi) "शीर्ष फ़ोरग्राउंड उपयोग ऐप्स" else "Top Foreground-Use Apps"
   val storageSummary: String get() = if (isHindi) "स्टोरेज सारांश" else "Storage Summary"
 
   val quickBatterySaver: String get() = if (isHindi) "बैटरी सेवर" else "Battery Saver"

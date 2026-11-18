@@ -21,7 +21,8 @@ class StorageInspector @Inject constructor(
 ) {
   fun inspect(temperatureCelsius: Float, batteryPercent: Int): StorageInsight {
     val statFs = StatFs(Environment.getDataDirectory().path)
-    val totalBytes = statFs.totalBytes.coerceAtLeast(1L)
+    val totalBytes = statFs.totalBytes
+    if (totalBytes <= 0L) return StorageInsight(0L, 0L, 0L, 0f, 0L, 0L)
     val freeBytes = statFs.availableBytes.coerceAtLeast(0L)
     val usedBytes = (totalBytes - freeBytes).coerceAtLeast(0L)
     val freePercent = ((freeBytes * 100.0) / totalBytes).toFloat().coerceIn(0f, 100f)
@@ -38,8 +39,8 @@ class StorageInspector @Inject constructor(
         else -> null
       }
 
-    val ownCacheBytes =
-      directorySize(context.cacheDir) + (context.externalCacheDir?.let { directorySize(it) } ?: 0L)
+    // The chart total is /data. Do not attribute an external/SD cache to that filesystem.
+    val ownCacheBytes = directorySize(context.cacheDir)
 
     val recommendations = mutableListOf<StorageRecommendation>()
 
