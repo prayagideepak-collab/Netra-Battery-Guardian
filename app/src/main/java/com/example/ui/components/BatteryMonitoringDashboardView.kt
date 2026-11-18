@@ -265,7 +265,7 @@ fun BatteryMonitoringDashboardView(
     val list = historySnapshots
       .sortedBy { it.timestampMillis }
       .map { it.temperatureCelsius }
-      .filter { it.isFinite() && it > -40f && it < 120f }
+      .filter { it.isFinite() }
       .toMutableList()
     if (telemetry.temperatureCelsius.isFinite()) {
       list.add(telemetry.temperatureCelsius)
@@ -801,8 +801,8 @@ fun BatteryMonitoringDashboardView(
         )
         TelemetryLineChart(
           values = finiteTempHistory,
-          minRange = 15f,
-          maxRange = 55f,
+          minRange = (finiteTempHistory.minOrNull() ?: 0f) - 1f,
+          maxRange = (finiteTempHistory.maxOrNull() ?: 0f) + 1f,
           lineColor = SemanticWarmAmber,
           emptyMessage = if (isHindi) "तापमान इतिहास के लिए वास्तविक रीडिंग प्रतीक्षित है।"
           else "Awaiting real hardware temperature snapshots.",
@@ -825,8 +825,8 @@ fun BatteryMonitoringDashboardView(
         )
         TelemetryLineChart(
           values = finiteVoltageHistoryMv.map { it.toFloat() },
-          minRange = minVolt.coerceAtLeast(2500f),
-          maxRange = maxVolt.coerceAtMost(5000f),
+          minRange = minVolt,
+          maxRange = maxVolt,
           lineColor = SemanticIceCyan,
           emptyMessage = if (isHindi) "वोल्टेज इतिहास के लिए वास्तविक रीडिंग प्रतीक्षित है।"
           else "Awaiting real hardware voltage snapshots.",
@@ -840,15 +840,16 @@ fun BatteryMonitoringDashboardView(
           HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
           Spacer(modifier = Modifier.height(4.dp))
         }
-        val maxCurr = (finiteCurrentHistoryMa.maxOrNull() ?: 2500f).coerceAtLeast(500f) * 1.15f
+        val maxCurr = (finiteCurrentHistoryMa.maxOrNull() ?: 0f) + 100f
+        val minCurr = (finiteCurrentHistoryMa.minOrNull() ?: 0f) - 100f
         Text(
-          text = if (isHindi) "करंट ग्राफ़ (mA)" else "Historical Current Magnitude (mA)",
+          text = if (isHindi) "करंट ग्राफ़ (mA)" else "Historical Signed Current (mA)",
           style = MaterialTheme.typography.labelLarge,
           color = SemanticCoolMint,
         )
         TelemetryLineChart(
           values = finiteCurrentHistoryMa,
-          minRange = 0f,
+          minRange = minCurr,
           maxRange = maxCurr,
           lineColor = SemanticCoolMint,
           emptyMessage = if (isHindi) "करंट इतिहास अनुपलब्ध या रीडिंग प्रतीक्षित है।"

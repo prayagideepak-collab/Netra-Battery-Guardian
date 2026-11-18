@@ -96,7 +96,7 @@ class LocalReportExporter @Inject constructor(
         historyRepository.getSnapshotsSince(
           System.currentTimeMillis() - lookbackDays.toLong() * 24L * 3600_000L,
         )
-      val healthLogs = historyRepository.getBatteryHealthLogsForExport()
+      val healthLogs = historyRepository.getBatteryHealthLogsForExport().filter { it.sourceLabel.startsWith("OBSERVED_V2") }
       val logs = historyRepository.getLogsForExport()
 
       val sb = StringBuilder()
@@ -109,7 +109,7 @@ class LocalReportExporter @Inject constructor(
         if (h.sourceLabel.startsWith("OBSERVED_V2")) {
           val cycle = h.estimatedCycleCount.takeIf { it.isFinite() && it >= 0f }?.toString() ?: ""
           val capacity = h.estimatedCapacityMah.takeIf { it > 0 }?.toString() ?: ""
-          sb.appendLine("HEALTH_LOG,${dateFormatter.format(Date(h.timestampMillis))},,,,,,,${cycle},,${capacity},,,${h.sourceLabel},,")
+          sb.appendLine(listOf("HEALTH_LOG", dateFormatter.format(Date(h.timestampMillis)), "", "", "", "", "", "", "", cycle, "", capacity, "", "", h.sourceLabel, "", "").joinToString(","))
         }
       }
 

@@ -253,9 +253,9 @@ fun StorageAnalysisDashboard(
         )
         Text(
           text = if (isHindi) {
-            "भरा बनाम खाली स्थान और शीर्ष स्टोरेज श्रेणी विभाजन"
+            "फ़ाइलसिस्टम का उपयोग और नेत्रा कैश। अन्य उपयोग अवर्गीकृत है।"
           } else {
-            "Occupied vs. Free space & top storage-consuming app categories"
+            "Filesystem totals and Netra cache. Other usage is unattributed."
           },
           style = MaterialTheme.typography.labelSmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
