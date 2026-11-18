@@ -138,7 +138,7 @@ class BatteryGuardianService : Service() {
       val topApps = appPowerInspector.collectTopApps(limit = 5)
       val output = rulesEngine.evaluate(telemetry, prefs, topApps, forceSnapshot = forceSnapshot)
       val diag = chargingClassifier.diagnose(telemetry)
-      com.example.widget.GuardianBatteryWidget.publish(this@BatteryGuardianService, telemetry, diag)
+      com.example.widget.GuardianBatteryWidget.publish(this@BatteryGuardianService, telemetry, diag, prefs.appLanguage)
       val statusLine =
         if (telemetry.isPlugged) {
           "${batteryLevelText(telemetry.levelPercent)} • ${telemetryText(diag.netPowerWatts, " W")} • ${telemetryText(telemetry.temperatureCelsius, "°C", 1)}"

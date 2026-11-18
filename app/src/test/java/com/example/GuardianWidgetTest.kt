@@ -66,8 +66,37 @@ class GuardianWidgetTest {
       currentMa = 0f, healthState = BatteryHealthState.GOOD), "widget-reported-fixture")
   }
 
-  private fun render(t: BatteryTelemetry, name: String) {
-    val root = GuardianBatteryWidget.views(c, GuardianBatteryWidget.buildModel(t)).apply(c, FrameLayout(c))
+  @Test fun fullBatteryShowsFullNotUnavailableEta() {
+    val t = BatteryTelemetry(levelPercent = 100, isCharging = true, isPlugged = true,
+      batteryStatus = BatteryManager.BATTERY_STATUS_FULL)
+    assertEquals("Full", GuardianBatteryWidget.buildModel(t).text["eta"])
+    render(t, "widget-full")
+  }
+  @Test fun dischargeRetainsObservedEtaAndSignedCurrentPower() {
+    val t = BatteryTelemetry(levelPercent = 70, currentMa = -500f, voltageMv = 4000,
+      batteryStatus = BatteryManager.BATTERY_STATUS_DISCHARGING)
+    val diagnosis = com.example.domain.engine.ChargingSpeedClassifier().diagnose(t).copy(estimatedMinutesRemaining = 120)
+    val m = GuardianBatteryWidget.buildModel(t, diagnosis).text
+    assertEquals("Approx. 2h 0m", m["eta"])
+    assertEquals("-500 mA", m["current"])
+    assertEquals("-2.0 W", m["power"])
+    render(t, "widget-discharge", diagnosis)
+  }
+  @Test fun hindiUnknownAndFullHaveTranslatedLabelsWithoutInventingReadings() {
+    val t = BatteryTelemetry(timestampMillis = 0)
+    assertEquals("तापमान", GuardianBatteryWidget.buildModel(t, language = AppLanguage.HINDI).text["tempLabel"])
+    render(t, "widget-hindi-unknown", language = AppLanguage.HINDI)
+    render(t.copy(levelPercent = 100, isCharging = true, batteryStatus = BatteryManager.BATTERY_STATUS_FULL),
+      "widget-hindi-full", language = AppLanguage.HINDI)
+  }
+  @Test fun readingBeforeFirstWidgetPlacementIsAlreadyCached() {
+    GuardianBatteryWidget.clear(c)
+    GuardianBatteryWidget.publish(c, BatteryTelemetry(levelPercent = 77))
+    assertEquals("77%", c.getSharedPreferences("guardian_widget_last_reading", 0).getString("percent", null))
+  }
+
+  private fun render(t: BatteryTelemetry, name: String, diagnosis: ChargingDiagnosis? = null, language: AppLanguage = AppLanguage.ENGLISH) {
+    val root = GuardianBatteryWidget.views(c, GuardianBatteryWidget.buildModel(t, diagnosis, language)).apply(c, FrameLayout(c))
     root.measure(View.MeasureSpec.makeMeasureSpec(280, View.MeasureSpec.EXACTLY),
       View.MeasureSpec.makeMeasureSpec(230, View.MeasureSpec.EXACTLY))
     root.layout(0, 0, 280, 230)
