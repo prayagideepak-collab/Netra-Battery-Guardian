@@ -147,10 +147,10 @@ class OptimizerAndChargingCsvExportTest {
           it.actionTarget == OptimizerActionTarget.BATTERY_SAVER_SETTINGS
       },
     )
-    assertTrue(
-      "Must recommend thermal cooling above 38.5C",
-      report.recommendations.any { it.actionTarget == OptimizerActionTarget.THERMAL_COOLING_MODE },
-    )
+    assertFalse("Celsius alone must not assert an OEM thermal limit",
+      report.recommendations.any { it.actionTarget == OptimizerActionTarget.THERMAL_COOLING_MODE })
+    val osOverheatReport = optimizer.analyze(telemetry.copy(healthState=com.example.domain.model.BatteryHealthState.OVERHEAT), UserPreferences(), normalBudget, DozeMonitorState(), emptyList())
+    assertTrue(osOverheatReport.recommendations.any { it.actionTarget == OptimizerActionTarget.THERMAL_COOLING_MODE })
 
     // In Doze / SURVIVAL mode, heavy app advice is skipped to honor ultra-low-power constraints
     val survivalBudget = PowerBudgetMetrics(AdaptivePowerTier.SURVIVAL, 0, 0, 1, 180, false)

@@ -42,14 +42,11 @@ class NetraDomainEnginesTest {
   @Test
   fun `temperature engine classifies 8 zones and 5 minute trend`() {
     val engine = TemperatureControlEngine()
-    assertEquals(TemperatureZone.TOO_COLD, engine.classifyZone(-2f))
-    assertEquals(TemperatureZone.COLD, engine.classifyZone(10f))
-    assertEquals(TemperatureZone.NORMAL, engine.classifyZone(28f))
-    assertEquals(TemperatureZone.WARM, engine.classifyZone(37f))
-    assertEquals(TemperatureZone.HOT, engine.classifyZone(41f))
-    assertEquals(TemperatureZone.VERY_HOT, engine.classifyZone(44f))
-    assertEquals(TemperatureZone.CRITICAL, engine.classifyZone(47f))
-    assertEquals(TemperatureZone.EMERGENCY, engine.classifyZone(51f))
+    listOf(-2f,10f,28f,37f,41f,44f,47f,51f).forEach {
+      assertEquals(TemperatureZone.UNAVAILABLE, engine.classifyZone(it))
+    }
+    assertEquals(TemperatureZone.CRITICAL, engine.classifyObserved(BatteryTelemetry(thermalLevel=ThermalLevel.CRITICAL)))
+    assertEquals(TemperatureZone.HOT, engine.classifyObserved(BatteryTelemetry(thermalLevel=ThermalLevel.MODERATE)))
 
     val t0 = 1_000_000L
     engine.recordTemperature(t0, 34.0f)
