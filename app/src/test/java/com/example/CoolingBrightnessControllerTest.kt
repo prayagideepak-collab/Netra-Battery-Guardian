@@ -96,4 +96,26 @@ class CoolingBrightnessControllerTest {
     CoolingBrightnessController(context, io).retryRestore()
     assertEquals(200, io.b); assertEquals(1, io.m)
   }
+  @Test fun `failed tighter target restores prior dim and original mode rather than discarding ledger`() {
+    val io = Io(); val controller = CoolingBrightnessController(context, io)
+    controller.setEnabled(true); assertTrue(controller.reconcile(true, 95))
+    io.failBrightness = true
+    assertFalse(controller.reconcile(true, 90))
+    assertTrue(controller.state.value.restorePending)
+    io.failBrightness = false
+    CoolingBrightnessController(context, io).retryRestore()
+    assertEquals(200, io.b); assertEquals(1, io.m)
+  }
+  @Test fun `stop restores originals without revoking consent while reset revokes it`() {
+    val io = Io(); val controller = CoolingBrightnessController(context, io)
+    controller.setEnabled(true); controller.reconcile(true)
+    controller.retryRestore()
+    assertEquals(200, io.b); assertEquals(1, io.m)
+    assertTrue(controller.state.value.enabled)
+    controller.reconcile(true)
+    controller.setEnabled(false)
+    assertFalse(CoolingBrightnessController(context, io).state.value.enabled)
+    assertEquals(200, io.b); assertEquals(1, io.m)
+  }
+
 }

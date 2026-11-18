@@ -222,5 +222,6 @@ class BatteryTelemetryCollector @Inject constructor(
   val coolingBrightnessState get() = coolingBrightness.state
   fun setCoolingBrightnessAllowed(allowed: Boolean) = coolingBrightness.setEnabled(allowed)
   fun reconcileCoolingBrightness(active: Boolean?, target: Int = 95): Boolean = coolingBrightness.reconcile(active, target)
+  fun stopCoolingBrightness() = coolingBrightness.retryRestore()
   fun retryCoolingBrightnessRestore() = coolingBrightness.retryRestore()
 }

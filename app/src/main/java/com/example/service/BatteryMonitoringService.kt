@@ -289,6 +289,7 @@ class BatteryMonitoringService : Service() {
   }
 
   override fun onDestroy() {
+    telemetryCollector.stopCoolingBrightness()
     if (receiverRegistered) {
       runCatching { unregisterReceiver(batteryChangedReceiver) }
       receiverRegistered = false

@@ -59,7 +59,7 @@ internal class CoolingBrightnessController(
   }
   private fun clear(external: Boolean = false) {
     save(prefs.edit().remove("before_b").remove("before_m").remove("applied_b")
-      .remove("complete").remove("error").putBoolean("external", external))
+      .remove("complete").remove("previous_b").remove("error").putBoolean("external", external))
   }
 
   @Synchronized fun setEnabled(enabled: Boolean) {
@@ -91,7 +91,7 @@ internal class CoolingBrightnessController(
       check(brightness in 0..255 && mode in 0..1)
       val next = target.coerceIn(30, 255)
       if (brightness <= next) { publish(); return owned() }
-      val edit = prefs.edit().putInt("applied_b", next).putBoolean("complete", false).remove("error")
+      val edit = prefs.edit().putInt("previous_b", brightness).putInt("applied_b", next).putBoolean("complete", false).remove("error")
       if (!owned()) edit.putInt("before_b", brightness).putInt("before_m", mode)
       save(edit) // Nothing is changed without durable originals and intended values.
       check(io.mode(0)); check(io.mode() == 0)
@@ -125,7 +125,7 @@ internal class CoolingBrightnessController(
       // A completed application owns exactly this pair. A different later pair belongs to the user.
       // For an interrupted write, either original or intended values are the only recoverable pair.
       val ours = if (prefs.getBoolean("complete", false)) b == appliedB && m == 0
-        else b in setOf(beforeB, appliedB) && m in setOf(beforeM, 0)
+        else b in setOf(beforeB, appliedB, prefs.getInt("previous_b", appliedB)) && m in setOf(beforeM, 0)
       if (!ours) { clear(external = true); publish("Manual settings kept. No restore overwrote them."); return }
       // Persist the recovery phase first, allowing restart after only brightness was restored.
       save(prefs.edit().putBoolean("complete", false))

@@ -246,6 +246,7 @@ class MainViewModel @Inject constructor(
   }
 
   fun onForegroundStopped() {
+    telemetryCollector.stopCoolingBrightness()
     isForegroundActive = false
     _isUiVisible.value = false
     thermalMonitor.unregister(ThermalMonitor.OWNER_FOREGROUND_UI)
@@ -577,6 +578,7 @@ class MainViewModel @Inject constructor(
 
   fun clearAllLocalData() {
     viewModelScope.launch {
+      telemetryCollector.setCoolingBrightnessAllowed(false)
       historyRepository.clearAllLocalData()
       preferencesRepository.resetAllPreferences()
       _uiState.update { it.copy(statusMessage = "All local Netra data cleared.") }
@@ -589,6 +591,7 @@ class MainViewModel @Inject constructor(
   }
 
   override fun onCleared() {
+    telemetryCollector.stopCoolingBrightness()
     thermalMonitor.unregister(ThermalMonitor.OWNER_FOREGROUND_UI)
     unregisterBatteryReceiver()
     voiceAssistant.shutdown()
