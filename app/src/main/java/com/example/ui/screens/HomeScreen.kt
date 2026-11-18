@@ -148,12 +148,12 @@ fun HomeScreen(
             isCharging = t.isCharging,
             temperatureCelsius = t.temperatureCelsius,
             animateRing = animateRing,
-            statusLabel = if (!t.hasLevel) "Unavailable" else if (t.isCharging) strings.charging else strings.discharging,
+            statusLabel = if (!t.hasLevel) "" else if (t.isCharging) strings.charging else strings.discharging,
           )
 
           if (diag != null) {
             Spacer(modifier = Modifier.height(6.dp))
-            StatusPill(
+            if (diag.speedClass != com.example.domain.model.ChargingSpeedClass.UNAVAILABLE) StatusPill(
               text = strings.speedLabel(diag.speedClass),
               color = if (t.isPlugged) SemanticCoolMint else MaterialTheme.colorScheme.secondary,
             )
@@ -166,7 +166,7 @@ fun HomeScreen(
                 val label = if (t.isPlugged) strings.timeToFull else strings.estBackup
                 val approx = if (diag.isTimeEstimateApproximate) " ${strings.approximateLabel}" else ""
                 "$label: $duration$approx"
-              } ?: if (strings.isHindi) "Unavailable: वास्तविक सत्र डेटा एकत्र हो रहा है" else "Unavailable: collecting real session observations"
+              } ?: ""
             Text(
               text = timeText,
               style = MaterialTheme.typography.titleMedium,

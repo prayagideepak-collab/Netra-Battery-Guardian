@@ -31,7 +31,7 @@ class TelemetryLabelsVisualTest {
       onOpenStorageTab = {}, onOpenBatteryTab = {}, onOpenHeatTab = {}, onOpenAppsTab = {},
     ) } } }
     rule.waitForIdle()
-    rule.onAllNodesWithText("Unavailable", substring = true).fetchSemanticsNodes().also { check(it.isNotEmpty()) }
+    rule.onAllNodesWithText("4500", substring = true).assertCountEquals(0)
     rule.onAllNodesWithText("1100", substring = true).assertCountEquals(0)
     rule.runOnIdle {
       val view = rule.activity.window.decorView

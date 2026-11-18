@@ -40,7 +40,6 @@ fun DozeEfficiencyCard(
   modifier: Modifier = Modifier,
 ) {
   val totalFormatted = DozeEfficiencyCalculator.formatDuration(metrics.totalDozeTimeMillis)
-  val savedPercentFormatted = if (isHindi) "अनुपलब्ध (Unavailable)" else "Unavailable"
   val pillColor = if (metrics.isCurrentlyInDoze) SemanticWarmAmber else SemanticCoolMint
   val statusText =
     if (metrics.isCurrentlyInDoze) {
