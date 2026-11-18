@@ -1,5 +1,6 @@
 package com.example.data.local.system
 
+import com.example.domain.model.telemetryText
 import android.content.Context
 import android.graphics.Color
 import android.graphics.Paint
@@ -33,14 +34,15 @@ class LocalReportExporter @Inject constructor(
 
       val sb = StringBuilder()
       sb.appendLine("# Netra Battery Guardian - Offline Local Report (100% On-Device)")
+      sb.appendLine("# Legacy records may contain old unverified defaults; they are history, not verified measurements.")
       sb.appendLine("type,timestamp,level_percent,temp_c,voltage_mv,current_ma,power_watts,charging,screen_on,profile,title,detail")
 
       snapshots.forEach { s ->
         sb.appendLine(
           "SNAPSHOT,${dateFormatter.format(Date(s.timestampMillis))},${s.levelPercent},${
-            String.format(Locale.US, "%.1f", s.temperatureCelsius)
-          },${s.voltageMv},${String.format(Locale.US, "%.0f", s.currentMa)},${
-            String.format(Locale.US, "%.2f", s.powerWatts)
+            telemetryText(s.temperatureCelsius)
+          },${if (s.voltageMv > 0) s.voltageMv.toString() else "Unavailable"},${telemetryText(s.currentMa, decimals = 0)},${
+            telemetryText(s.powerWatts, decimals = 2)
           },${s.isCharging},${s.screenOn},${s.activeProfile},,"
         )
       }
@@ -94,14 +96,14 @@ class LocalReportExporter @Inject constructor(
       canvas.drawText("Last 24h Telemetry Summary (${snapshots.size} snapshots)", 36f, y, headingPaint)
       y += 18f
       if (snapshots.isNotEmpty()) {
-        val avgTemp = snapshots.map { it.temperatureCelsius }.average()
-        val maxTemp = snapshots.maxOf { it.temperatureCelsius }
+        val avgTemp = snapshots.map { it.temperatureCelsius }.filter { it.isFinite() }.average().toFloat()
+        val maxTemp = snapshots.map { it.temperatureCelsius }.filter { it.isFinite() }.maxOrNull() ?: Float.NaN
         val minLevel = snapshots.minOf { it.levelPercent }
         val maxLevel = snapshots.maxOf { it.levelPercent }
         canvas.drawText(
           "Level Range: $minLevel% - $maxLevel% | Avg Temp: ${
-            String.format(Locale.US, "%.1f", avgTemp)
-          }°C | Peak Temp: ${String.format(Locale.US, "%.1f", maxTemp)}°C",
+            telemetryText(avgTemp)
+          }°C | Peak Temp: ${telemetryText(maxTemp)}°C",
           36f,
           y,
           bodyPaint,
@@ -116,8 +118,8 @@ class LocalReportExporter @Inject constructor(
       chargingSessions.take(6).forEach { cs ->
         canvas.drawText(
           "${dateFormatter.format(Date(cs.startTimeMillis))}: ${cs.startLevel}% -> ${cs.endLevel}% | ${cs.speedClass} (${
-            String.format(Locale.US, "%.1f", cs.maxPowerWatts)
-          } W max, ${String.format(Locale.US, "%.1f", cs.peakTempCelsius)}°C peak)",
+            telemetryText(cs.maxPowerWatts)
+          } W max, ${telemetryText(cs.peakTempCelsius)}°C peak)",
           36f,
           y,
           bodyPaint,
@@ -126,7 +128,7 @@ class LocalReportExporter @Inject constructor(
       }
       y += 14f
 
-      canvas.drawText("Recent Guardian Activity Log", 36f, y, headingPaint)
+      canvas.drawText("Activity (legacy entries are unverified)", 36f, y, headingPaint)
       y += 18f
       logs.forEach { log ->
         if (y < 800f) {

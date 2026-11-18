@@ -21,6 +21,9 @@ class BatteryHistoryRepository @Inject constructor(
   private val dao: NetraDao,
   private val batteryDao: BatteryDao,
 ) {
+  private fun knownMax(a: Float, b: Float) = listOf(a, b).filter { it.isFinite() }.maxOrNull() ?: Float.NEGATIVE_INFINITY
+  private fun knownMin(a: Float, b: Float) = listOf(a, b).filter { it.isFinite() }.minOrNull() ?: Float.NEGATIVE_INFINITY
+
   fun observe24HourSnapshots(nowMillis: Long = System.currentTimeMillis()): Flow<List<BatterySnapshot>> =
     dao.observeSnapshotsSince(nowMillis - 24L * 3600_000L)
 
@@ -48,6 +51,7 @@ class BatteryHistoryRepository @Inject constructor(
     activeProfile: GuardianProfile,
     isHourlyCheckpoint: Boolean = false,
   ) {
+    if (!telemetry.hasSnapshot) return
     val latestHourly = batteryDao.getLatestHourlySnapshot()
     val shouldMarkHourly =
       isHourlyCheckpoint ||
@@ -65,9 +69,9 @@ class BatteryHistoryRepository @Inject constructor(
         timestampMillis = telemetry.timestampMillis,
         levelPercent = telemetry.levelPercent,
         voltageMv = telemetry.voltageMv,
-        temperatureCelsius = telemetry.temperatureCelsius,
-        currentMa = telemetry.currentMa,
-        powerWatts = telemetry.instantaneousPowerWatts,
+        temperatureCelsius = telemetry.temperatureCelsius.takeIf { it.isFinite() } ?: Float.NEGATIVE_INFINITY,
+        currentMa = telemetry.currentMa.takeIf { it.isFinite() } ?: Float.NEGATIVE_INFINITY,
+        powerWatts = telemetry.instantaneousPowerWatts.takeIf { it.isFinite() } ?: Float.NEGATIVE_INFINITY,
         isCharging = telemetry.isCharging,
         chargingStatus = statusStr,
         isPlugged = telemetry.isPlugged,
@@ -85,6 +89,7 @@ class BatteryHistoryRepository @Inject constructor(
     speedClass: ChargingSpeedClass,
     powerWatts: Float,
   ) {
+    if (!telemetry.hasLevel) return
     val open = dao.getOpenChargingSession()
     if (open == null) {
       // Close any open discharge session
@@ -95,9 +100,9 @@ class BatteryHistoryRepository @Inject constructor(
           endTimeMillis = null,
           startLevel = telemetry.levelPercent,
           endLevel = telemetry.levelPercent,
-          peakTempCelsius = telemetry.temperatureCelsius,
-          avgPowerWatts = powerWatts,
-          maxPowerWatts = powerWatts,
+          peakTempCelsius = telemetry.temperatureCelsius.takeIf { it.isFinite() } ?: Float.NEGATIVE_INFINITY,
+          avgPowerWatts = powerWatts.takeIf { it.isFinite() } ?: Float.NEGATIVE_INFINITY,
+          maxPowerWatts = powerWatts.takeIf { it.isFinite() } ?: Float.NEGATIVE_INFINITY,
           speedClass = speedClass.name,
           plugType = telemetry.plugType.name,
         )
@@ -106,9 +111,9 @@ class BatteryHistoryRepository @Inject constructor(
       dao.updateChargingSession(
         open.copy(
           endLevel = telemetry.levelPercent,
-          peakTempCelsius = maxOf(open.peakTempCelsius, telemetry.temperatureCelsius),
-          avgPowerWatts = (open.avgPowerWatts + powerWatts) / 2f,
-          maxPowerWatts = maxOf(open.maxPowerWatts, powerWatts),
+          peakTempCelsius = knownMax(open.peakTempCelsius, telemetry.temperatureCelsius),
+          avgPowerWatts = if (open.avgPowerWatts.isFinite() && powerWatts.isFinite()) (open.avgPowerWatts + powerWatts) / 2f else knownMax(open.avgPowerWatts, powerWatts),
+          maxPowerWatts = knownMax(open.maxPowerWatts, powerWatts),
           speedClass = speedClass.name,
         )
       )
@@ -116,12 +121,13 @@ class BatteryHistoryRepository @Inject constructor(
   }
 
   suspend fun closeOpenChargingSession(telemetry: BatteryTelemetry) {
+    if (!telemetry.hasLevel) return
     val open = dao.getOpenChargingSession() ?: return
     dao.updateChargingSession(
       open.copy(
         endTimeMillis = telemetry.timestampMillis,
         endLevel = telemetry.levelPercent,
-        peakTempCelsius = maxOf(open.peakTempCelsius, telemetry.temperatureCelsius),
+        peakTempCelsius = knownMax(open.peakTempCelsius, telemetry.temperatureCelsius),
       )
     )
   }
@@ -132,6 +138,7 @@ class BatteryHistoryRepository @Inject constructor(
     screenOffDeltaMin: Int = 0,
     abnormalDrain: Boolean = false,
   ) {
+    if (!telemetry.hasLevel) return
     val open = dao.getOpenDischargeSession()
     if (open == null) {
       closeOpenChargingSession(telemetry)
@@ -143,8 +150,8 @@ class BatteryHistoryRepository @Inject constructor(
           endLevel = telemetry.levelPercent,
           screenOnMinutes = screenOnDeltaMin,
           screenOffMinutes = screenOffDeltaMin,
-          minTempCelsius = telemetry.temperatureCelsius,
-          maxTempCelsius = telemetry.temperatureCelsius,
+          minTempCelsius = telemetry.temperatureCelsius.takeIf { it.isFinite() } ?: Float.NEGATIVE_INFINITY,
+          maxTempCelsius = telemetry.temperatureCelsius.takeIf { it.isFinite() } ?: Float.NEGATIVE_INFINITY,
           abnormalDrainDetected = abnormalDrain,
         )
       )
@@ -154,8 +161,8 @@ class BatteryHistoryRepository @Inject constructor(
           endLevel = telemetry.levelPercent,
           screenOnMinutes = open.screenOnMinutes + screenOnDeltaMin,
           screenOffMinutes = open.screenOffMinutes + screenOffDeltaMin,
-          minTempCelsius = minOf(open.minTempCelsius, telemetry.temperatureCelsius),
-          maxTempCelsius = maxOf(open.maxTempCelsius, telemetry.temperatureCelsius),
+          minTempCelsius = knownMin(open.minTempCelsius, telemetry.temperatureCelsius),
+          maxTempCelsius = knownMax(open.maxTempCelsius, telemetry.temperatureCelsius),
           abnormalDrainDetected = open.abnormalDrainDetected || abnormalDrain,
         )
       )
@@ -163,13 +170,14 @@ class BatteryHistoryRepository @Inject constructor(
   }
 
   suspend fun closeOpenDischargeSession(telemetry: BatteryTelemetry) {
+    if (!telemetry.hasLevel) return
     val open = dao.getOpenDischargeSession() ?: return
     dao.updateDischargeSession(
       open.copy(
         endTimeMillis = telemetry.timestampMillis,
         endLevel = telemetry.levelPercent,
-        minTempCelsius = minOf(open.minTempCelsius, telemetry.temperatureCelsius),
-        maxTempCelsius = maxOf(open.maxTempCelsius, telemetry.temperatureCelsius),
+        minTempCelsius = knownMin(open.minTempCelsius, telemetry.temperatureCelsius),
+        maxTempCelsius = knownMax(open.maxTempCelsius, telemetry.temperatureCelsius),
       )
     )
   }

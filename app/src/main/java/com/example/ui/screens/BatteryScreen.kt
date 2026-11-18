@@ -1,5 +1,8 @@
 package com.example.ui.screens
 
+import com.example.domain.model.capacityText
+import com.example.domain.model.batteryLevelText
+import com.example.domain.model.telemetryText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -102,7 +105,7 @@ fun BatteryScreen(
         }
         if (diag != null) {
           StatusPill(
-            text = "${strings.speedLabel(diag.speedClass)} • ${String.format("%.1f", diag.netPowerWatts)} W",
+            text = "${strings.speedLabel(diag.speedClass)} • ${telemetryText(diag.netPowerWatts, " W")}",
             color = SemanticCoolMint,
           )
           Text(
@@ -110,7 +113,7 @@ fun BatteryScreen(
             style = MaterialTheme.typography.bodyLarge,
           )
           Text(
-            text = "Plug: ${t.plugType.name} • Rolling Current: ${diag.rollingAvgCurrentMa.toInt()} mA • Est. Capacity: ${t.estimatedCapacityMah} mAh" +
+            text = "Plug: ${t.plugType.name} • Rolling Current: ${telemetryText(diag.rollingAvgCurrentMa, " mA", 0)} • Est. Capacity: ${capacityText(t.estimatedCapacityMah)}" +
               (t.chargeCycleCount?.let { " • Cycles: $it" } ?: ""),
             style = TelemetryMonoStyle,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -145,7 +148,7 @@ fun BatteryScreen(
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-          text = "Inputs: ${t.levelPercent}% | Plug:${t.isPlugged} | OS Saver:${t.osBatterySaverOn} | Thermal:${t.thermalLevel.name} | Screen:${t.screenOn} | FG:${t.isAppInForeground} | Bucket:${t.standbyBucket.name} | Net:${t.networkType.name}",
+          text = "Inputs: ${batteryLevelText(t.levelPercent)} | Plug:${t.isPlugged} | OS Saver:${t.osBatterySaverOn} | Thermal:${t.thermalLevel.name} | Screen:${t.screenOn} | FG:${t.isAppInForeground} | Bucket:${t.standbyBucket.name} | Net:${t.networkType.name}",
           style = MaterialTheme.typography.labelSmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -184,19 +187,13 @@ fun BatteryScreen(
 
     // Long-Term Battery Cycle Count & Capacity Degradation (Logged Daily While Charging)
     item {
-      val latestHealth = state.batteryHealthLogs.firstOrNull()
-      val cyclesText =
-        if (latestHealth != null) String.format(Locale.US, "%.2f", latestHealth.estimatedCycleCount)
-        else String.format(Locale.US, "%.2f", state.prefs.cumulativeChargedPercent / 100f)
-      val estMah = latestHealth?.estimatedCapacityMah ?: t.estimatedCapacityMah
-      val designMah =
-        latestHealth?.designCapacityMah
-          ?: state.prefs.designCapacityBaselineMah.takeIf { it > 0 }
-          ?: state.prefs.observedCapacityMah
-      val degPct =
-        latestHealth?.degradationPercent
-          ?: if (designMah > 0) (((designMah - estMah).toFloat() / designMah.toFloat()) * 100f).coerceIn(0f, 99f) else 0f
-      val healthPct = latestHealth?.healthPercent ?: (100f - degPct).coerceIn(1f, 100f)
+      val latestHealth = state.batteryHealthLogs.firstOrNull { it.sourceLabel.startsWith("OBSERVED_V2") }
+      val cycles = t.chargeCycleCount?.toFloat() ?: latestHealth?.estimatedCycleCount ?: -1f
+      val cyclesText = if (cycles >= 0) cycles.toInt().toString() else "Unavailable"
+      val estMah = t.estimatedCapacityMah
+      val designText = "Unavailable"
+      val degText = "Unavailable"
+      val healthText = "Unavailable"
 
       GuardianCard(modifier = Modifier.widthIn(max = 720.dp).testTag("battery_cycle_health_card")) {
         Row(
@@ -210,21 +207,21 @@ fun BatteryScreen(
             modifier = Modifier.weight(1f),
           )
           StatusPill(
-            text = "${String.format(Locale.US, "%.1f", healthPct)}% Health",
-            color = if (degPct >= 20f) SemanticWarmAmber else SemanticCoolMint,
+            text = "$healthText Health",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
         }
         Text(
-          text = "Est. Cycles: $cyclesText • Capacity: $estMah / $designMah mAh • Wear: ${String.format(Locale.US, "%.1f", degPct)}%",
+          text = "OS Cycles: $cyclesText • Capacity: ${capacityText(estMah)} • Design: $designText • Wear: $degText",
           style = TelemetryMonoStyle,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
           text = if (latestHealth != null) {
-            "Logged daily while charging (${state.batteryHealthLogs.size} day record(s) • Source: ${latestHealth.sourceLabel})"
+            "Observed OS cycles/counter only. Design capacity, wear and health: Unavailable."
           } else {
             if (strings.isHindi) "चार्जिंग के दौरान प्रतिदिन एक बार चक्र और क्षमता लॉग की जाती है।"
-            else "Evaluated & logged once per day while charging via BatteryManager metrics."
+            else "Design capacity, wear and health are unavailable without a verified baseline."
           },
           style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -234,19 +231,13 @@ fun BatteryScreen(
 
     // Long-Term Battery Cycle Count & Capacity Degradation (Logged Daily While Charging)
     item {
-      val latestHealth = state.batteryHealthLogs.firstOrNull()
-      val cyclesText =
-        if (latestHealth != null) String.format(Locale.US, "%.2f", latestHealth.estimatedCycleCount)
-        else String.format(Locale.US, "%.2f", state.prefs.cumulativeChargedPercent / 100f)
-      val estMah = latestHealth?.estimatedCapacityMah ?: t.estimatedCapacityMah
-      val designMah =
-        latestHealth?.designCapacityMah
-          ?: state.prefs.designCapacityBaselineMah.takeIf { it > 0 }
-          ?: state.prefs.observedCapacityMah
-      val degPct =
-        latestHealth?.degradationPercent
-          ?: if (designMah > 0) (((designMah - estMah).toFloat() / designMah.toFloat()) * 100f).coerceIn(0f, 99f) else 0f
-      val healthPct = latestHealth?.healthPercent ?: (100f - degPct).coerceIn(1f, 100f)
+      val latestHealth = state.batteryHealthLogs.firstOrNull { it.sourceLabel.startsWith("OBSERVED_V2") }
+      val cycles = t.chargeCycleCount?.toFloat() ?: latestHealth?.estimatedCycleCount ?: -1f
+      val cyclesText = if (cycles >= 0) cycles.toInt().toString() else "Unavailable"
+      val estMah = t.estimatedCapacityMah
+      val designText = "Unavailable"
+      val degText = "Unavailable"
+      val healthText = "Unavailable"
 
       GuardianCard(modifier = Modifier.widthIn(max = 720.dp).testTag("battery_cycle_health_card")) {
         Row(
@@ -260,21 +251,21 @@ fun BatteryScreen(
             modifier = Modifier.weight(1f),
           )
           StatusPill(
-            text = "${String.format(Locale.US, "%.1f", healthPct)}% Health",
-            color = if (degPct >= 20f) SemanticWarmAmber else SemanticCoolMint,
+            text = "$healthText Health",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
         }
         Text(
-          text = "Est. Cycles: $cyclesText • Capacity: $estMah / $designMah mAh • Wear: ${String.format(Locale.US, "%.1f", degPct)}%",
+          text = "OS Cycles: $cyclesText • Capacity: ${capacityText(estMah)} • Design: $designText • Wear: $degText",
           style = TelemetryMonoStyle,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
           text = if (latestHealth != null) {
-            "Logged daily while charging (${state.batteryHealthLogs.size} day record(s) • Source: ${latestHealth.sourceLabel})"
+            "Observed OS cycles/counter only. Design capacity, wear and health: Unavailable."
           } else {
             if (strings.isHindi) "चार्जिंग के दौरान प्रतिदिन एक बार चक्र और क्षमता लॉग की जाती है।"
-            else "Evaluated & logged once per day while charging via BatteryManager metrics."
+            else "Design capacity, wear and health are unavailable without a verified baseline."
           },
           style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -291,7 +282,7 @@ fun BatteryScreen(
           verticalAlignment = Alignment.CenterVertically,
         ) {
           Text(
-            text = if (strings.isHindi) "बैटरी स्तर इतिहास" else "Battery Level History",
+            text = if (strings.isHindi) "बैटरी इतिहास (पुराना डेटा असत्यापित)" else "Battery History (legacy data unverified)",
             style = MaterialTheme.typography.titleMedium,
           )
           Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -322,7 +313,7 @@ fun BatteryScreen(
           style = MaterialTheme.typography.titleMedium,
         )
         TelemetryLineChart(
-          values = snapshots.map { it.temperatureCelsius },
+          values = snapshots.map { it.temperatureCelsius }.filter { it.isFinite() },
           minRange = 10f,
           maxRange = 55f,
           lineColor = SemanticWarmAmber,
@@ -380,7 +371,7 @@ fun BatteryScreen(
             )
           }
           Text(
-            text = "Voltage: ${String.format("%.2f", snap.voltageMv / 1000f)} V • Temp: ${String.format("%.1f", snap.temperatureCelsius)}°C • ${snap.plugType}",
+            text = "Voltage: ${telemetryText(if (snap.voltageMv > 0) snap.voltageMv / 1000f else Float.NaN, " V", 2)} • Temp: ${telemetryText(snap.temperatureCelsius, "°C")} • ${snap.plugType}",
             style = TelemetryMonoStyle,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )

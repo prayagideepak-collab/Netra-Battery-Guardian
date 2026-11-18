@@ -113,7 +113,7 @@ fun AnimatedBatteryRing(
   Box(
     modifier = modifier
       .size(176.dp)
-      .semantics { contentDescription = "Battery $levelPercent percent, $statusLabel" },
+      .semantics { contentDescription = if (levelPercent in 0..100) "Battery $levelPercent percent, $statusLabel" else "Battery level unavailable" },
     contentAlignment = Alignment.Center,
   ) {
     Canvas(modifier = Modifier.fillMaxSize().padding(10.dp)) {
@@ -154,7 +154,7 @@ fun AnimatedBatteryRing(
         )
       }
       Text(
-        text = "$levelPercent%",
+        text = if (levelPercent in 0..100) "$levelPercent%" else "Unavailable",
         style = MaterialTheme.typography.displayLarge,
         color = MaterialTheme.colorScheme.onSurface,
       )
@@ -336,6 +336,7 @@ fun StatusPill(
 
 fun zoneColor(zone: TemperatureZone): Color =
   when (zone) {
+    TemperatureZone.UNAVAILABLE -> Color.Gray
     TemperatureZone.TOO_COLD, TemperatureZone.COLD -> SemanticIceCyan
     TemperatureZone.NORMAL -> SemanticCoolMint
     TemperatureZone.WARM -> SemanticWarmAmber

@@ -28,3 +28,12 @@ jobs:
         run: keytool -genkeypair -keystore debug.keystore -storepass android -keypass android -alias androiddebugkey -dname 'CN=CI Debug' -keyalg RSA -validity 2
       - name: Unit tests, lint and debug APK
         run: gradle --no-daemon --stacktrace testDebugUnitTest lintDebug assembleDebug
+      - name: Keep test and label preview evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: guardian-test-evidence
+          retention-days: 3
+          path: |
+            app/build/reports/guardian-ui/
+            app/build/test-results/testDebugUnitTest/

@@ -52,7 +52,7 @@ fun HourlyTempVoltageChart(
   isLowPowerSurvival: Boolean = false,
   modifier: Modifier = Modifier,
 ) {
-  val ordered = remember(snapshots) { snapshots.sortedBy { it.timestampMillis } }
+  val ordered = remember(snapshots) { snapshots.filter { it.temperatureCelsius.isFinite() && it.voltageMv > 0 }.sortedBy { it.timestampMillis } }
   val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
 
   val tempColor = SemanticWarmAmber

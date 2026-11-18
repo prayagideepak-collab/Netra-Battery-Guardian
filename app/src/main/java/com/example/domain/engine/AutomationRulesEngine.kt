@@ -1,5 +1,7 @@
 package com.example.domain.engine
 
+import com.example.domain.model.batteryLevelText
+import com.example.domain.model.telemetryText
 import com.example.data.local.prefs.PreferencesRepository
 import com.example.data.local.prefs.UserPreferences
 import com.example.data.local.system.BatteryTelemetryCollector
@@ -101,8 +103,8 @@ class AutomationRulesEngine @Inject constructor(
           severity = LogSeverity.INFO,
           titleEn = "Charger Disconnected",
           titleHi = "चार्जर हटाया गया",
-          detailEn = "Switched to battery mode at ${telemetry.levelPercent}%.",
-          detailHi = "${telemetry.levelPercent}% पर बैटरी मोड सक्रिय हुआ।",
+          detailEn = "Switched to battery mode at ${batteryLevelText(telemetry.levelPercent)}.",
+          detailHi = "${batteryLevelText(telemetry.levelPercent)} पर बैटरी मोड सक्रिय हुआ।",
           whyEn = "Battery mode tracks screen-on/off drain and protects against background spikes.",
           whyHi = "बैटरी मोड स्क्रीन ऑन/ऑफ़ खपत की निगरानी करता है और बैकग्राउंड ड्रेन रोकता है।",
         )
@@ -120,7 +122,7 @@ class AutomationRulesEngine @Inject constructor(
 
     // 2. Charging C5..C100 (only while charging and screen is on) and Discharging D100..D1 milestones
     val step = prefs.announcementStepPercent.coerceIn(1, 25)
-    if (telemetry.isCharging && telemetry.isPlugged) {
+    if (telemetry.hasLevel && telemetry.isCharging && telemetry.isPlugged) {
       val hitBoundary = telemetry.levelPercent == 100 || (telemetry.levelPercent > 0 && telemetry.levelPercent % step == 0)
       if (hitBoundary && telemetry.levelPercent != lastAnnouncedChargeLevel && telemetry.screenOn) {
         lastAnnouncedChargeLevel = telemetry.levelPercent
@@ -131,7 +133,7 @@ class AutomationRulesEngine @Inject constructor(
           isCharging = true,
         )
       }
-    } else if (!telemetry.isPlugged) {
+    } else if (telemetry.hasLevel && !telemetry.isPlugged) {
       val hitBoundary =
         telemetry.levelPercent == 1 ||
           telemetry.levelPercent == 100 ||
@@ -143,7 +145,7 @@ class AutomationRulesEngine @Inject constructor(
     }
 
     // 3. Low battery alerts at 20%, 10%, 5%, 1%
-    if (!telemetry.isCharging && prefs.lowBatteryAlertsEnabled) {
+    if (telemetry.hasLevel && !telemetry.isCharging && prefs.lowBatteryAlertsEnabled) {
       val thresholdHit =
         when (telemetry.levelPercent) {
           1, 5, 10, 20 -> telemetry.levelPercent
@@ -197,7 +199,7 @@ class AutomationRulesEngine @Inject constructor(
       preferencesRepository.setBelow35Since(0L)
     }
 
-    val coolingActive = zone.ordinal >= TemperatureZone.HOT.ordinal
+    val coolingActive = zone != TemperatureZone.UNAVAILABLE && zone.ordinal >= TemperatureZone.HOT.ordinal
     val coolingStepsEn = mutableListOf<String>()
     val coolingStepsHi = mutableListOf<String>()
 
@@ -225,36 +227,36 @@ class AutomationRulesEngine @Inject constructor(
     if (lastZone != zone) {
       when (zone) {
         TemperatureZone.EMERGENCY -> {
-          val msgEn = "Emergency battery temperature ${String.format("%.1f", telemetry.temperatureCelsius)}°C! Disconnect charger immediately and power off if heat persists."
-          val msgHi = "आपातकालीन बैटरी तापमान ${String.format("%.1f", telemetry.temperatureCelsius)}°C! तुरंत चार्जर हटाएँ और फ़ोन बंद करें।"
+          val msgEn = "Emergency battery temperature ${telemetryText(telemetry.temperatureCelsius, "°C", 1)}! Disconnect charger immediately and power off if heat persists."
+          val msgHi = "आपातकालीन बैटरी तापमान ${telemetryText(telemetry.temperatureCelsius, "°C", 1)}! तुरंत चार्जर हटाएँ और फ़ोन बंद करें।"
           notificationHelper.postCriticalAlert(NotificationHelper.ID_THERMAL_ALERT, "Emergency Heat Alert", msgEn)
           voiceAssistant.announceThermalSafety("temp_emergency", msgEn, msgHi, msgEn, prefs, urgent = true, screenOn = telemetry.screenOn)
         }
         TemperatureZone.CRITICAL -> {
-          val msgEn = "Critical battery temperature ${String.format("%.1f", telemetry.temperatureCelsius)}°C. Disconnect charger immediately and let phone cool."
-          val msgHi = "गंभीर तापमान ${String.format("%.1f", telemetry.temperatureCelsius)}°C। तुरंत चार्जर हटाएँ और फ़ोन को ठंडा होने दें।"
+          val msgEn = "Critical battery temperature ${telemetryText(telemetry.temperatureCelsius, "°C", 1)}. Disconnect charger immediately and let phone cool."
+          val msgHi = "गंभीर तापमान ${telemetryText(telemetry.temperatureCelsius, "°C", 1)}। तुरंत चार्जर हटाएँ और फ़ोन को ठंडा होने दें।"
           notificationHelper.postCriticalAlert(NotificationHelper.ID_THERMAL_ALERT, "Critical Temperature Alert", msgEn)
           voiceAssistant.announceThermalSafety("temp_critical", msgEn, msgHi, msgEn, prefs, urgent = true, screenOn = telemetry.screenOn)
         }
         TemperatureZone.VERY_HOT -> {
-          val msgEn = "Phone is very hot (${String.format("%.1f", telemetry.temperatureCelsius)}°C). Strong cooling active; close heavy apps and hotspot."
-          val msgHi = "फ़ोन बहुत गर्म है (${String.format("%.1f", telemetry.temperatureCelsius)}°C)। भारी ऐप्स और हॉटस्पॉट बंद करें।"
+          val msgEn = "Phone is very hot (${telemetryText(telemetry.temperatureCelsius, "°C", 1)}). Strong cooling active; close heavy apps and hotspot."
+          val msgHi = "फ़ोन बहुत गर्म है (${telemetryText(telemetry.temperatureCelsius, "°C", 1)})। भारी ऐप्स और हॉटस्पॉट बंद करें।"
           notificationHelper.postAdvisory(NotificationHelper.ID_THERMAL_ALERT, "Very Hot Device", msgEn)
         }
         TemperatureZone.HOT -> {
-          val msgEn = "Cooling Mode activated at ${String.format("%.1f", telemetry.temperatureCelsius)}°C."
+          val msgEn = "Cooling Mode activated at ${telemetryText(telemetry.temperatureCelsius, "°C", 1)}."
           notificationHelper.postAdvisory(NotificationHelper.ID_THERMAL_ALERT, "Cooling Mode Active", msgEn)
         }
         else -> Unit
       }
-      if (zone.ordinal >= TemperatureZone.HOT.ordinal || zone == TemperatureZone.TOO_COLD) {
+      if (zone != TemperatureZone.UNAVAILABLE && zone.ordinal >= TemperatureZone.HOT.ordinal || zone == TemperatureZone.TOO_COLD) {
         historyRepository.logActivity(
           category = LogCategory.HEAT,
           severity = if (zone.ordinal >= TemperatureZone.CRITICAL.ordinal) LogSeverity.CRITICAL else LogSeverity.WARNING,
           titleEn = "Thermal Zone: ${zone.name}",
           titleHi = "तापमान स्थिति: ${zone.name}",
-          detailEn = "Battery temperature measured at ${String.format("%.1f", telemetry.temperatureCelsius)}°C.",
-          detailHi = "बैटरी का तापमान ${String.format("%.1f", telemetry.temperatureCelsius)}°C दर्ज किया गया।",
+          detailEn = "Battery temperature measured at ${telemetryText(telemetry.temperatureCelsius, "°C", 1)}.",
+          detailHi = "बैटरी का तापमान ${telemetryText(telemetry.temperatureCelsius, "°C", 1)} दर्ज किया गया।",
           whyEn = "Automatic thermal protection monitors battery °C to prevent heat wear.",
           whyHi = "स्वचालित थर्मल सुरक्षा बैटरी को अधिक गर्मी से होने वाले नुकसान से बचाती है।",
         )
@@ -268,8 +270,8 @@ class AutomationRulesEngine @Inject constructor(
     val activeProfile =
       when {
         coolingActive -> GuardianProfile.COOLING
-        !telemetry.isCharging && telemetry.levelPercent < 10 -> GuardianProfile.ULTRA_BATTERY_SAVER
-        !telemetry.isCharging && telemetry.levelPercent <= prefs.batterySaverThreshold -> GuardianProfile.BATTERY_SAVER
+        telemetry.hasLevel && !telemetry.isCharging && telemetry.levelPercent < 10 -> GuardianProfile.ULTRA_BATTERY_SAVER
+        telemetry.hasLevel && !telemetry.isCharging && telemetry.levelPercent <= prefs.batterySaverThreshold -> GuardianProfile.BATTERY_SAVER
         telemetry.isPlugged -> GuardianProfile.CHARGING
         prefs.manualProfileOverride != null -> prefs.manualProfileOverride
         isNight -> GuardianProfile.SLEEP

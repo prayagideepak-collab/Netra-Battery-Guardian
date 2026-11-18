@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import com.example.domain.model.telemetryText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -68,7 +69,7 @@ fun HeatScreen(
             verticalAlignment = Alignment.CenterVertically,
           ) {
             Text(
-              text = "${String.format("%.1f", t.temperatureCelsius)}°C",
+              text = "${telemetryText(t.temperatureCelsius, "°C", 1)}",
               style = MaterialTheme.typography.displayLarge,
               color = zColor,
             )
@@ -83,7 +84,7 @@ fun HeatScreen(
             style = MaterialTheme.typography.titleMedium,
           )
           Text(
-            text = "5-min Trend: ${String.format("%+.2f", report.trend.deltaPerMinute)} °C/min",
+            text = "5-min Trend: ${telemetryText(report.trend.deltaPerMinute, decimals = 2)} °C/min",
             style = TelemetryMonoStyle,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
@@ -259,7 +260,7 @@ fun HeatScreen(
           style = MaterialTheme.typography.titleMedium,
         )
         TelemetryLineChart(
-          values = state.snapshots24h.map { it.temperatureCelsius },
+          values = state.snapshots24h.map { it.temperatureCelsius }.filter { it.isFinite() },
           minRange = 10f,
           maxRange = 55f,
           lineColor = SemanticWarmAmber,
