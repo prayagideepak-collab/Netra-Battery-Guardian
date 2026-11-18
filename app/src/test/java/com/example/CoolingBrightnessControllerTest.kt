@@ -106,6 +106,26 @@ class CoolingBrightnessControllerTest {
     CoolingBrightnessController(context, io).retryRestore()
     assertEquals(200, io.b); assertEquals(1, io.m)
   }
+  @Test fun `unknown temperature recovers interrupted writes after process recreation`() {
+    val io = Io().apply { b = 200; m = 0 }
+    context.getSharedPreferences("guardian_cooling_consent_v1", Context.MODE_PRIVATE).edit()
+      .putBoolean("enabled", true).putInt("before_b", 200).putInt("before_m", 1)
+      .putInt("previous_b", 200).putInt("applied_b", 95).putBoolean("complete", false).commit()
+    val restarted = CoolingBrightnessController(context, io)
+    assertFalse(restarted.reconcile(null))
+    assertEquals(200, io.b); assertEquals(1, io.m)
+    assertFalse(restarted.state.value.restorePending)
+    assertTrue(restarted.state.value.enabled)
+  }
+  @Test fun `unknown temperature retries pending restore but preserves manual edit`() {
+    val io = Io(); val controller = CoolingBrightnessController(context, io)
+    controller.setEnabled(true); controller.reconcile(true)
+    io.failMode = true; controller.retryRestore()
+    assertTrue(controller.state.value.restorePending)
+    io.b = 210; io.failMode = false
+    CoolingBrightnessController(context, io).reconcile(null)
+    assertEquals(210, io.b); assertEquals(0, io.m)
+  }
   @Test fun `stop restores originals without revoking consent while reset revokes it`() {
     val io = Io(); val controller = CoolingBrightnessController(context, io)
     controller.setEnabled(true); controller.reconcile(true)

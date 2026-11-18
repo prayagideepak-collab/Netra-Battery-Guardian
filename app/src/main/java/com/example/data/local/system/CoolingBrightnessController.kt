@@ -74,11 +74,13 @@ internal class CoolingBrightnessController(
     if (!prefs.getBoolean("enabled", false)) { restoreInternal(); return false }
     if (active == false) { restoreInternal(); return false }
     if (storageFailed) { publish("Settings storage unavailable. New changes paused."); return false }
-    if (active == null) { publish("Temperature unavailable; no new brightness change."); return false }
     return try {
       if (owned() && (!prefs.getBoolean("complete", false) || prefs.contains("error"))) {
         restoreInternal(); return false
       }
+      // Unknown temperature pauses new controls, not recovery of an interrupted
+      // transaction. A completed cooling session remains owned until known end.
+      if (active == null) { publish("Temperature unavailable; no new brightness change."); return false }
       if (owned() && (io.brightness() != prefs.getInt("applied_b", -1) || io.mode() != 0)) {
         clear(external = true)
         publish("Manual change kept; cooling will not overwrite it.")
