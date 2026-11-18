@@ -137,6 +137,7 @@ class BatteryTelemetryCollector @Inject constructor(
 
     return BatteryTelemetry(
       timestampMillis = System.currentTimeMillis(),
+      batteryStatus = status,
       levelPercent = levelPercent,
       isCharging = isCharging,
       isPlugged = isPlugged,
