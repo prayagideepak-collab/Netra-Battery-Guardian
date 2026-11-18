@@ -103,14 +103,16 @@ internal class CoolingBrightnessController(
       true
     } catch (_: Exception) {
       error("Restore pending: brightness change failed. Retry restoration.")
-      restoreInternal()
+      // This rollback is still in the same failed apply call. Do not persist
+      // the witness: later retries/recreated controllers must remain conservative.
+      restoreInternal(synchronousFailedApply = true)
       false
     }
   }
 
   @Synchronized fun retryRestore() { restoreInternal() }
 
-  private fun restoreInternal() {
+  private fun restoreInternal(synchronousFailedApply: Boolean = false) {
     if (!owned()) {
       if (prefs.getBoolean("external", false) || prefs.contains("error")) runCatching { save(prefs.edit().putBoolean("external", false).remove("error")) }
       publish()
@@ -124,6 +126,15 @@ internal class CoolingBrightnessController(
       check(beforeB in 0..255 && beforeM in 0..1 && appliedB in 0..255)
       val b = io.brightness()
       val m = io.mode()
+      // After an interrupted apply or restore, original brightness with manual
+      // mode could equally be our partial write or a later manual choice. Even a
+      // recorded earlier mode write cannot prove who last chose this pair.
+      if (!synchronousFailedApply && !prefs.getBoolean("complete", false) &&
+        b == beforeB && m == 0 && beforeM == 1) {
+        clear(external = true)
+        publish("Current mode kept: interrupted recovery cannot distinguish a later manual choice. Exact mode recovery is unavailable.")
+        return
+      }
       // A completed application owns exactly this pair. A different later pair belongs to the user.
       // For an interrupted write, either original or intended values are the only recoverable pair.
       val ours = if (prefs.getBoolean("complete", false)) b == appliedB && m == 0
