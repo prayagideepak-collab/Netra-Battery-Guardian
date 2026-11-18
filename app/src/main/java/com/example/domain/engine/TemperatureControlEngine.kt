@@ -16,6 +16,7 @@ class TemperatureControlEngine @Inject constructor() {
 
   @Synchronized
   fun recordTemperature(timestampMillis: Long, tempC: Float) {
+    if (!tempC.isFinite()) return
     recentSamples.addLast(TempSample(timestampMillis, tempC))
     // Keep last 10 minutes
     while (recentSamples.isNotEmpty() && timestampMillis - recentSamples.first().timestampMillis > 600_000L) {
@@ -27,6 +28,7 @@ class TemperatureControlEngine @Inject constructor() {
     tempC: Float,
     sensitivity: CoolingSensitivity = CoolingSensitivity.BALANCED,
   ): TemperatureZone {
+    if (!tempC.isFinite()) return TemperatureZone.UNAVAILABLE
     val offset =
       when (sensitivity) {
         CoolingSensitivity.RELAXED -> 2.0f
@@ -50,11 +52,13 @@ class TemperatureControlEngine @Inject constructor() {
     currentTimeMillis: Long,
     sensitivity: CoolingSensitivity = CoolingSensitivity.BALANCED,
   ): TemperatureTrendResult {
+    if (!currentTempC.isFinite()) return TemperatureTrendResult(Float.NaN, TrendStatus.UNAVAILABLE, "Unavailable: temperature was not reported.", "Unavailable: तापमान उपलब्ध नहीं है।")
     val targetTime = currentTimeMillis - 5 * 60_000L
     val baseline =
       synchronized(this) {
         recentSamples.minByOrNull { kotlin.math.abs(it.timestampMillis - targetTime) }
       }
+    if (baseline == null || currentTimeMillis - baseline.timestampMillis < 45_000L) return TemperatureTrendResult(Float.NaN, TrendStatus.UNAVAILABLE, "Unavailable: collecting temperature observations.", "Unavailable: तापमान डेटा एकत्र हो रहा है।")
     val deltaPerMinute =
       if (baseline == null || currentTimeMillis - baseline.timestampMillis < 45_000L) {
         0f

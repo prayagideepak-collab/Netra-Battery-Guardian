@@ -67,7 +67,7 @@ class BatteryLifecycleAndDozeTest {
   fun `BatteryLifecycleEstimator skips discharging and logs cycles and degradation once per day while charging`() = runBlocking {
     val bm = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
     val shadowBm = Shadows.shadowOf(bm)
-    // Simulate a 4050 mAh remaining capacity at 100% (10% wear vs 4500 mAh baseline)
+    // Android counter supports approximate capacity, never an assumed design baseline or health.
     shadowBm.setLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER, 4_050_000L)
 
     val day1Base = 20_000L * BatteryLifecycleEstimator.MILLIS_PER_DAY + 3_600_000L
@@ -105,9 +105,9 @@ class BatteryLifecycleAndDozeTest {
     assertNotNull(entry1)
     assertEquals(42f, entry1!!.estimatedCycleCount, 0.01f)
     assertEquals(4050, entry1.estimatedCapacityMah)
-    assertEquals(4500, entry1.designCapacityMah)
-    assertEquals(10f, entry1.degradationPercent, 0.2f)
-    assertEquals(90f, entry1.healthPercent, 0.2f)
+    assertEquals(-1, entry1.designCapacityMah)
+    assertEquals(-1f, entry1.degradationPercent, 0f)
+    assertEquals(-1f, entry1.healthPercent, 0f)
 
     // 3. Second evaluation on the same day must be deduplicated
     val sameDayRes = lifecycleEstimator.evaluateAndLogDailyWhileCharging(

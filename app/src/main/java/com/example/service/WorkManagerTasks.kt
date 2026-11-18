@@ -51,7 +51,7 @@ class BackgroundDrainCheckWorker @AssistedInject constructor(
     )
 
     // If screen turned on or charging started, no abnormal screen-off alert needed
-    if (telemetry.screenOn || telemetry.isPlugged) return Result.success()
+    if (!telemetry.hasLevel || telemetry.screenOn || telemetry.isPlugged) return Result.success()
 
     val baselineLevel = prefs.lastScreenOffLevel
     val baselineTime = prefs.lastScreenOffTimestamp
@@ -110,7 +110,7 @@ class StorageAuditWorker @AssistedInject constructor(
     )
 
     // Skip heavy storage work if hot >=40°C or battery <15%
-    if (telemetry.temperatureCelsius >= 40f || telemetry.levelPercent < 15) {
+    if (!telemetry.hasTemperature || !telemetry.hasLevel || telemetry.temperatureCelsius >= 40f || telemetry.levelPercent < 15) {
       return Result.success()
     }
 
@@ -266,14 +266,15 @@ class IdleBatteryPersistenceWorker @AssistedInject constructor(
         else -> if (telemetry.isCharging) "CHARGING" else "DISCHARGING"
       }
 
+    if (!telemetry.hasSnapshot) return Result.success()
     appDatabase.batteryDao().insertSnapshot(
       BatterySnapshot(
         timestampMillis = telemetry.timestampMillis,
         levelPercent = telemetry.levelPercent,
         voltageMv = telemetry.voltageMv,
-        temperatureCelsius = telemetry.temperatureCelsius,
-        currentMa = telemetry.currentMa,
-        powerWatts = diagnosis.netPowerWatts,
+        temperatureCelsius = telemetry.temperatureCelsius.takeIf { it.isFinite() } ?: Float.NEGATIVE_INFINITY,
+        currentMa = telemetry.currentMa.takeIf { it.isFinite() } ?: Float.NEGATIVE_INFINITY,
+        powerWatts = diagnosis.netPowerWatts.takeIf { it.isFinite() } ?: Float.NEGATIVE_INFINITY,
         isCharging = telemetry.isCharging,
         chargingStatus = statusLabel,
         isPlugged = telemetry.isPlugged,

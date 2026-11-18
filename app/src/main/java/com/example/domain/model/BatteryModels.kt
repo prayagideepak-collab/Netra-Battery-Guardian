@@ -76,6 +76,7 @@ enum class BatteryHealthState {
 }
 
 enum class ChargingSpeedClass {
+  UNAVAILABLE,
   NOT_CHARGING,
   DISCHARGING_WHILE_PLUGGED,
   SLOW,
@@ -87,6 +88,7 @@ enum class ChargingSpeedClass {
 }
 
 enum class TemperatureZone {
+  UNAVAILABLE,
   TOO_COLD,
   COLD,
   NORMAL,
@@ -98,6 +100,7 @@ enum class TemperatureZone {
 }
 
 enum class TrendStatus {
+  UNAVAILABLE,
   HIGH_HEAT_RISK,
   RISING_FAST,
   WARM_STABLE,
@@ -171,21 +174,21 @@ data class SelfHealingStatus(
 
 data class BatteryTelemetry(
   val timestampMillis: Long = System.currentTimeMillis(),
-  val levelPercent: Int = 0,
+  val levelPercent: Int = -1,
   val isCharging: Boolean = false,
   val isPlugged: Boolean = false,
   val plugType: PlugType = PlugType.NONE,
-  val temperatureCelsius: Float = 25.0f,
-  val voltageMv: Int = 3850,
-  val currentMa: Float = 0f,
+  val temperatureCelsius: Float = Float.NaN,
+  val voltageMv: Int = -1,
+  val currentMa: Float = Float.NaN,
   val chargeCounterUah: Long = -1L,
-  val estimatedCapacityMah: Int = 4500,
-  val healthState: BatteryHealthState = BatteryHealthState.GOOD,
-  val technology: String = "Li-ion",
+  val estimatedCapacityMah: Int = -1,
+  val healthState: BatteryHealthState = BatteryHealthState.UNKNOWN,
+  val technology: String = "Unavailable",
   val thermalLevel: ThermalLevel = ThermalLevel.NONE,
   val osBatterySaverOn: Boolean = false,
   val screenOn: Boolean = true,
-  val screenBrightnessPercent: Int = 50,
+  val screenBrightnessPercent: Int = -1,
   val canWriteSettings: Boolean = false,
   val hotspotLikelyActive: Boolean = false,
   val poorCellularSignal: Boolean = false,
@@ -195,11 +198,16 @@ data class BatteryTelemetry(
   val isAppInForeground: Boolean = true,
   val chargeCycleCount: Int? = null,
 ) {
+  val hasLevel: Boolean get() = levelPercent in 0..100
+  val hasTemperature: Boolean get() = temperatureCelsius.isFinite()
+  val hasPower: Boolean get() = voltageMv > 0 && currentMa.isFinite()
+  val hasSnapshot: Boolean get() = hasLevel
+
   val voltageVolts: Float
-    get() = voltageMv / 1000f
+    get() = if (voltageMv > 0) voltageMv / 1000f else Float.NaN
 
   val instantaneousPowerWatts: Float
-    get() = (voltageMv / 1000f) * (currentMa / 1000f)
+    get() = if (hasPower) (voltageMv / 1000f) * (currentMa / 1000f) else Float.NaN
 }
 
 data class RollingPowerSample(

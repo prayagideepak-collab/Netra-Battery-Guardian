@@ -1,5 +1,7 @@
 package com.example.service
 
+import com.example.domain.model.batteryLevelText
+import com.example.domain.model.telemetryText
 import android.app.NotificationManager
 import android.app.Service
 import android.content.BroadcastReceiver
@@ -38,10 +40,10 @@ import javax.inject.Inject
  */
 data class BatteryServiceState(
   val isRunning: Boolean = false,
-  val levelPercent: Int = 0,
-  val temperatureCelsius: Float = 0f,
-  val voltageMv: Int = 0,
-  val currentMa: Float = 0f,
+  val levelPercent: Int = -1,
+  val temperatureCelsius: Float = Float.NaN,
+  val voltageMv: Int = -1,
+  val currentMa: Float = Float.NaN,
   val chargingStatus: String = "UNKNOWN",
   val isCharging: Boolean = false,
   val isPlugged: Boolean = false,
@@ -135,10 +137,10 @@ class BatteryMonitoringService : Service() {
     if (intent != null) {
       val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
       val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
-      val pct = if (level >= 0) ((level * 100f) / scale).toInt().coerceIn(0, 100) else _serviceState.value.levelPercent
+      val pct = if (level >= 0) ((level * 100f) / scale).toInt().coerceIn(0, 100) else -1
       val tempTenths = intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE)
-      val tempC = if (tempTenths != Int.MIN_VALUE) tempTenths / 10f else _serviceState.value.temperatureCelsius
-      val voltage = intent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, _serviceState.value.voltageMv)
+      val tempC = if (tempTenths != Int.MIN_VALUE) tempTenths / 10f else Float.NaN
+      val voltage = intent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1)
       val statusCode = intent.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN)
       val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
       val statusLabel = mapStatusCode(statusCode)
@@ -198,19 +200,15 @@ class BatteryMonitoringService : Service() {
           "DISCHARGING"
         }
 
-      val currentPropMa =
-        batteryManager?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
-          ?.takeIf { it != Int.MIN_VALUE }
-          ?.let { if (kotlin.math.abs(it) > 25_000) it / 1000f else it.toFloat() }
-          ?: telemetry.currentMa
+      val currentPropMa = telemetry.currentMa
 
       _serviceState.update {
         it.copy(
           isRunning = true,
           levelPercent = telemetry.levelPercent,
-          temperatureCelsius = telemetry.temperatureCelsius,
+          temperatureCelsius = telemetry.temperatureCelsius.takeIf { it.isFinite() } ?: Float.NEGATIVE_INFINITY,
           voltageMv = telemetry.voltageMv,
-          currentMa = currentPropMa,
+          currentMa = currentPropMa.takeIf { it.isFinite() } ?: Float.NEGATIVE_INFINITY,
           chargingStatus = chargingStatusLabel,
           isCharging = telemetry.isCharging,
           isPlugged = telemetry.isPlugged,
@@ -225,15 +223,15 @@ class BatteryMonitoringService : Service() {
       val oneHourMillis = 3_600_000L
 
       // Persist an explicit hourly BatterySnapshot checkpoint when >= 1 hour has elapsed
-      if (lastHourly == null || now - lastHourly.timestampMillis >= oneHourMillis) {
+      if (telemetry.hasSnapshot && (lastHourly == null || now - lastHourly.timestampMillis >= oneHourMillis)) {
         batteryDao.insertSnapshot(
           BatterySnapshot(
             timestampMillis = now,
             levelPercent = telemetry.levelPercent,
             voltageMv = telemetry.voltageMv,
-            temperatureCelsius = telemetry.temperatureCelsius,
-            currentMa = currentPropMa,
-            powerWatts = diag.netPowerWatts,
+            temperatureCelsius = telemetry.temperatureCelsius.takeIf { it.isFinite() } ?: Float.NEGATIVE_INFINITY,
+            currentMa = currentPropMa.takeIf { it.isFinite() } ?: Float.NEGATIVE_INFINITY,
+            powerWatts = diag.netPowerWatts.takeIf { it.isFinite() } ?: Float.NEGATIVE_INFINITY,
             isCharging = telemetry.isCharging,
             chargingStatus = chargingStatusLabel,
             isPlugged = telemetry.isPlugged,
@@ -247,8 +245,8 @@ class BatteryMonitoringService : Service() {
       }
 
       val statusSummary =
-        "${telemetry.levelPercent}% • ${String.format("%.1f", telemetry.temperatureCelsius)}°C • ${
-          String.format("%.2f", telemetry.voltageVolts)
+        "${batteryLevelText(telemetry.levelPercent)} • ${telemetryText(telemetry.temperatureCelsius, "°C", 1)} • ${
+          telemetryText(telemetry.voltageVolts, "", 2)
         }V • $chargingStatusLabel"
       val notification = notificationHelper.buildGuardianForegroundNotification("Netra Battery Monitor", statusSummary)
       val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager

@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import com.example.domain.model.telemetryText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -146,7 +147,7 @@ fun HomeScreen(
             isCharging = t.isCharging,
             temperatureCelsius = t.temperatureCelsius,
             animateRing = animateRing,
-            statusLabel = if (t.isCharging) strings.charging else strings.discharging,
+            statusLabel = if (!t.hasLevel) "Unavailable" else if (t.isCharging) strings.charging else strings.discharging,
           )
 
           if (diag != null) {
@@ -164,9 +165,9 @@ fun HomeScreen(
                 val label = if (t.isPlugged) strings.timeToFull else strings.estBackup
                 val approx = if (diag.isTimeEstimateApproximate) " ${strings.approximateLabel}" else ""
                 "$label: $duration$approx"
-              } ?: diag.explanationEn
+              } ?: if (strings.isHindi) "Unavailable: वास्तविक सत्र डेटा एकत्र हो रहा है" else "Unavailable: collecting real session observations"
             Text(
-              text = if (strings.isHindi && diag.estimatedMinutesRemaining == null) diag.explanationHi else timeText,
+              text = timeText,
               style = MaterialTheme.typography.titleMedium,
             )
             Text(
@@ -184,22 +185,22 @@ fun HomeScreen(
         ) {
           TelemetryMiniStat(
             label = strings.temperature,
-            value = "${String.format("%.1f", t.temperatureCelsius)}°C",
+            value = "${telemetryText(t.temperatureCelsius, "°C", 1)}",
             modifier = Modifier.weight(1f),
           )
           TelemetryMiniStat(
             label = strings.voltage,
-            value = "${String.format("%.2f", t.voltageVolts)} V",
+            value = telemetryText(t.voltageVolts, " V", 2),
             modifier = Modifier.weight(1f),
           )
           TelemetryMiniStat(
             label = strings.current,
-            value = "${t.currentMa.toInt()} mA",
+            value = "${telemetryText(t.currentMa, " mA", 0)}",
             modifier = Modifier.weight(1f),
           )
           TelemetryMiniStat(
             label = strings.netPower,
-            value = "${String.format("%.1f", diag?.netPowerWatts ?: t.instantaneousPowerWatts)} W",
+            value = "${telemetryText(diag?.netPowerWatts ?: t.instantaneousPowerWatts, " W")}",
             modifier = Modifier.weight(1f),
           )
         }
@@ -418,7 +419,9 @@ private fun TelemetryMiniStat(
     )
     Text(
       text = value,
-      style = TelemetryMonoStyle,
+      style = if (value == "Unavailable") MaterialTheme.typography.labelSmall else TelemetryMonoStyle,
+      maxLines = 1,
+      softWrap = false,
       color = MaterialTheme.colorScheme.onSurface,
     )
   }

@@ -52,7 +52,7 @@ data class UserPreferences(
   val lastScreenOffLevel: Int = -1,
   val lastScreenOffTimestamp: Long = 0L,
   val below35SinceMillis: Long = 0L,
-  val observedCapacityMah: Int = 4500,
+  val observedCapacityMah: Int = -1,
   val cumulativeChargedPercent: Float = 0f,
   val designCapacityBaselineMah: Int = 0,
   val lastChargeLevelForCycles: Int = -1,
@@ -131,7 +131,7 @@ class PreferencesRepository @Inject constructor(
           lastScreenOffLevel = p[Keys.LAST_SCREEN_OFF_LEVEL] ?: -1,
           lastScreenOffTimestamp = p[Keys.LAST_SCREEN_OFF_TIME] ?: 0L,
           below35SinceMillis = p[Keys.BELOW_35_SINCE] ?: 0L,
-          observedCapacityMah = (p[Keys.OBSERVED_CAPACITY_MAH] ?: 4500).coerceIn(1500, 12000),
+          observedCapacityMah = -1, // Previous cache included fabricated defaults.
           cumulativeChargedPercent = (p[Keys.CUMULATIVE_CHARGED_PCT] ?: 0f).coerceAtLeast(0f),
           designCapacityBaselineMah = (p[Keys.DESIGN_CAPACITY_BASELINE_MAH] ?: 0).coerceAtLeast(0),
           lastChargeLevelForCycles = p[Keys.LAST_CHARGE_LEVEL_FOR_CYCLES] ?: -1,

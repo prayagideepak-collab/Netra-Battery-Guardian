@@ -32,6 +32,7 @@ class AdaptivePowerTierEngine @Inject constructor() {
     // Battery % + Charging + OS Battery Saver with 2% hysteresis buffer
     val batteryTier =
       when {
+        !telemetry.hasLevel -> currentTier
         level < 5 -> AdaptivePowerTier.SURVIVAL
         level <= 6 && currentTier == AdaptivePowerTier.SURVIVAL -> AdaptivePowerTier.SURVIVAL
         telemetry.isCharging && level >= 15 -> AdaptivePowerTier.NORMAL

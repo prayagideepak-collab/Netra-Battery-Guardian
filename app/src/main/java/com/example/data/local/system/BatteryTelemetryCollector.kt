@@ -35,7 +35,7 @@ class BatteryTelemetryCollector @Inject constructor(
 
   fun collect(
     intentOverride: Intent? = null,
-    observedCapacityFallbackMah: Int = 4500,
+    observedCapacityFallbackMah: Int = -1,
     isAppInForeground: Boolean = true,
   ): BatteryTelemetry {
     val intent =
@@ -44,9 +44,9 @@ class BatteryTelemetryCollector @Inject constructor(
 
     val levelRaw = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
     val scale = intent?.getIntExtra(BatteryManager.EXTRA_SCALE, 100)?.coerceAtLeast(1) ?: 100
-    val levelPercent =
-      if (levelRaw >= 0) ((levelRaw * 100f) / scale).toInt().coerceIn(0, 100)
-      else batteryManager?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)?.coerceIn(0, 100) ?: 50
+    val reportedLevel = batteryManager?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+    val levelPercent = if (levelRaw in 0..scale) ((levelRaw * 100f) / scale).toInt()
+      else reportedLevel?.takeIf { it in 0..100 } ?: -1
 
     val status = intent?.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN)
       ?: BatteryManager.BATTERY_STATUS_UNKNOWN
@@ -64,38 +64,22 @@ class BatteryTelemetryCollector @Inject constructor(
         else -> PlugType.NONE
       }
 
-    val tempTenths = intent?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 280) ?: 280
-    val temperatureCelsius = tempTenths / 10f
-
-    val voltageMv = (intent?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, 3850) ?: 3850)
-      .let { if (it in 1..20) it * 1000 else it } // Guard devices reporting V instead of mV
-
+    val tempTenths = intent?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE) ?: Int.MIN_VALUE
+    val temperatureCelsius = if (tempTenths != Int.MIN_VALUE) tempTenths / 10f else Float.NaN
+    // Android documents millivolts and microamps. Never infer another unit by magnitude.
+    val voltageMv = intent?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1)?.takeIf { it > 0 } ?: -1
     val rawCurrent = batteryManager?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW) ?: Int.MIN_VALUE
     val rawAvgCurrent = batteryManager?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE) ?: Int.MIN_VALUE
-    val chosenRaw = if (rawCurrent != Int.MIN_VALUE && rawCurrent != 0) rawCurrent else rawAvgCurrent
-
-    var currentMa =
-      if (chosenRaw == Int.MIN_VALUE) {
-        if (isCharging) 1100f else -320f
-      } else {
-        // Android spec is microamps; some OEMs return milliamps directly
-        if (abs(chosenRaw) > 25_000) chosenRaw / 1000f else chosenRaw.toFloat()
-      }
-
-    // Normalize sign: positive when actively charging, negative when discharging
-    if (isCharging && currentMa < -50f) {
-      currentMa = abs(currentMa)
-    } else if (!isPlugged && currentMa > 50f) {
-      currentMa = -abs(currentMa)
-    }
+    val chosenRaw = if (rawCurrent != Int.MIN_VALUE) rawCurrent else rawAvgCurrent
+    val currentMa = if (chosenRaw == Int.MIN_VALUE) Float.NaN else chosenRaw / 1000f
 
     val chargeCounterRaw = batteryManager?.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER) ?: -1L
     val chargeCounterUah = if (chargeCounterRaw > 0L) chargeCounterRaw else -1L
     val derivedCapacityMah =
       if (chargeCounterUah > 0L && levelPercent >= 15) {
-        ((chargeCounterUah / 1000.0) / (levelPercent / 100.0)).toInt().coerceIn(1500, 12000)
+        ((chargeCounterUah / 1000.0) / (levelPercent / 100.0)).toInt()
       } else {
-        observedCapacityFallbackMah
+        -1 // Legacy cached capacities lack measurement provenance. Do not reuse them.
       }
 
     val healthInt = intent?.getIntExtra(BatteryManager.EXTRA_HEALTH, BatteryManager.BATTERY_HEALTH_UNKNOWN)
@@ -111,7 +95,7 @@ class BatteryTelemetryCollector @Inject constructor(
         else -> BatteryHealthState.UNKNOWN
       }
 
-    val technology = intent?.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY)?.takeIf { it.isNotBlank() } ?: "Li-ion"
+    val technology = intent?.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY)?.takeIf { it.isNotBlank() } ?: "Unavailable"
 
     val cycleCount =
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -141,9 +125,9 @@ class BatteryTelemetryCollector @Inject constructor(
     val canWriteSettings = Settings.System.canWrite(context)
     val brightnessRaw =
       runCatching {
-        Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS, 128)
-      }.getOrDefault(128)
-    val brightnessPercent = ((brightnessRaw / 255f) * 100f).toInt().coerceIn(0, 100)
+        Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS)
+      }.getOrDefault(-1)
+    val brightnessPercent = if (brightnessRaw in 0..255) ((brightnessRaw / 255f) * 100f).toInt() else -1
 
     val hotspotLikelyActive = detectHotspotLikelyActive()
     val isMetered = connectivityManager?.isActiveNetworkMetered ?: false
@@ -237,7 +221,7 @@ class BatteryTelemetryCollector @Inject constructor(
   fun tryLowerBrightnessForCooling(targetBrightness255: Int = 90): Boolean {
     if (!Settings.System.canWrite(context)) return false
     return runCatching {
-      val current = Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS, 128)
+      val current = Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS)
       if (current > targetBrightness255) {
         Settings.System.putInt(
           context.contentResolver,

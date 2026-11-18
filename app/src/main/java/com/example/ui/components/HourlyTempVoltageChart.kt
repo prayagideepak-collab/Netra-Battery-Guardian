@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import com.example.domain.model.telemetryText
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -128,18 +129,15 @@ fun HourlyTempVoltageChart(
       return
     }
 
-    val temps = remember(ordered) { ordered.map { it.temperatureCelsius } }
-    val volts = remember(ordered) { ordered.map { it.voltageMv / 1000f } }
+    val temps = remember(ordered) { ordered.map { it.temperatureCelsius }.filter { it.isFinite() } }
+    val volts = remember(ordered) { ordered.filter { it.voltageMv > 0 }.map { it.voltageMv / 1000f } }
 
     val minTemp = remember(temps) { minOf(15f, (temps.minOrNull() ?: 20f) - 3f) }
     val maxTemp = remember(temps) { maxOf(48f, (temps.maxOrNull() ?: 40f) + 3f) }
     val minVolt = remember(volts) { minOf(3.2f, (volts.minOrNull() ?: 3.5f) - 0.15f) }
     val maxVolt = remember(volts) { maxOf(4.5f, (volts.maxOrNull() ?: 4.3f) + 0.15f) }
 
-    val summaryDescription =
-      "Hourly chart with ${ordered.size} points. Latest ${String.format(Locale.US, "%.1f", temps.last())}°C and ${
-        String.format(Locale.US, "%.2f", volts.last())
-      }V."
+    val summaryDescription = "Hourly chart with ${ordered.size} observations; ${temps.size} temperature and ${volts.size} voltage points. Latest temperature ${telemetryText(temps.lastOrNull() ?: Float.NaN, "°C")}; voltage ${telemetryText(volts.lastOrNull() ?: Float.NaN, " V", 2)}."
 
     Row(
       modifier = Modifier.fillMaxWidth(),
@@ -198,47 +196,23 @@ fun HourlyTempVoltageChart(
         val tempPoints = ArrayList<Offset>(ordered.size)
         val voltPoints = ArrayList<Offset>(ordered.size)
 
+        var previousTemp: Offset? = null
+        var previousVolt: Offset? = null
         ordered.forEachIndexed { idx, snap ->
           val x = idx * stepX
-          val tempNorm = ((snap.temperatureCelsius - minTemp) / tempSpan).coerceIn(0f, 1f)
-          val tempY = size.height - tempNorm * size.height
-          val voltVal = snap.voltageMv / 1000f
-          val voltNorm = ((voltVal - minVolt) / voltSpan).coerceIn(0f, 1f)
-          val voltY = size.height - voltNorm * size.height
-
-          val tPt = Offset(x, tempY)
-          val vPt = Offset(x, voltY)
-          tempPoints += tPt
-          voltPoints += vPt
-
-          if (idx == 0) {
-            tempLine.moveTo(x, tempY)
-            tempFill.moveTo(x, size.height)
-            tempFill.lineTo(x, tempY)
-            voltLine.moveTo(x, voltY)
-          } else {
-            tempLine.lineTo(x, tempY)
-            tempFill.lineTo(x, tempY)
-            voltLine.lineTo(x, voltY)
-          }
-          if (idx == ordered.lastIndex) {
-            tempFill.lineTo(x, size.height)
-            tempFill.close()
-          }
+          if (snap.temperatureCelsius.isFinite()) {
+            val point = Offset(x, size.height - ((snap.temperatureCelsius - minTemp) / tempSpan).coerceIn(0f, 1f) * size.height)
+            tempPoints += point
+            previousTemp?.let { drawLine(tempColor, it, point, 2.6.dp.toPx()) }
+            previousTemp = point
+          } else previousTemp = null // A missing reading is a gap, never an invented segment.
+          if (snap.voltageMv > 0) {
+            val point = Offset(x, size.height - ((snap.voltageMv / 1000f - minVolt) / voltSpan).coerceIn(0f, 1f) * size.height)
+            voltPoints += point
+            previousVolt?.let { drawLine(voltColor, it, point, 2.2.dp.toPx()) }
+            previousVolt = point
+          } else previousVolt = null
         }
-
-        // Temperature area gradient + curve
-        drawPath(
-          path = tempFill,
-          brush = Brush.verticalGradient(
-            colors = listOf(tempColor.copy(alpha = 0.24f), tempColor.copy(alpha = 0.02f)),
-          ),
-        )
-        drawPath(
-          path = tempLine,
-          color = tempColor,
-          style = Stroke(width = 2.6.dp.toPx(), cap = StrokeCap.Round),
-        )
 
         // Voltage curve
         drawPath(
@@ -280,9 +254,9 @@ fun HourlyTempVoltageChart(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
       Text(
-        text = "Peak ${String.format(Locale.US, "%.1f", temps.max())} °C • ${
-          String.format(Locale.US, "%.2f", volts.min())
-        }–${String.format(Locale.US, "%.2f", volts.max())} V",
+        text = "Peak ${telemetryText(temps.maxOrNull() ?: Float.NaN)} °C • ${
+          telemetryText(volts.minOrNull() ?: Float.NaN, decimals = 2)
+        }–${telemetryText(volts.maxOrNull() ?: Float.NaN, decimals = 2)} V",
         style = TelemetryMonoStyle,
         color = MaterialTheme.colorScheme.onSurface,
         modifier = Modifier.testTag("hourly_chart_summary_metrics"),

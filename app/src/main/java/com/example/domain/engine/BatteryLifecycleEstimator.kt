@@ -31,7 +31,7 @@ data class BatteryLifecycleResult(
 )
 
 /**
- * Estimates and logs long-term battery cycle counts and capacity degradation metrics
+ * Logs Android cycle count and approximate counter-derived capacity, never guessed degradation
  * strictly once per day while the device is charging, using [BatteryManager] telemetry
  * and atomic DataStore + Room persistence.
  */
@@ -57,14 +57,13 @@ class BatteryLifecycleEstimator @Inject constructor(
     intentOverride: Intent? = null,
     nowMillis: Long = System.currentTimeMillis(),
   ): BatteryLifecycleResult = evalMutex.withLock {
-    val prefs = preferencesRepository.preferences.first()
     val intent = intentOverride ?: context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
 
     val levelRaw = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
     val scale = intent?.getIntExtra(BatteryManager.EXTRA_SCALE, 100)?.coerceAtLeast(1) ?: 100
-    val levelPercent =
-      if (levelRaw >= 0) ((levelRaw * 100f) / scale).toInt().coerceIn(0, 100)
-      else batteryManager?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)?.coerceIn(0, 100) ?: 50
+    val reportedLevel = batteryManager?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+    val levelPercent = if (levelRaw in 0..scale) ((levelRaw * 100f) / scale).toInt()
+      else reportedLevel?.takeIf { it in 0..100 } ?: -1
 
     val statusCode = intent?.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN)
       ?: BatteryManager.BATTERY_STATUS_UNKNOWN
@@ -87,42 +86,15 @@ class BatteryLifecycleEstimator @Inject constructor(
 
     val chargeCounterRaw = batteryManager?.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER) ?: -1L
     val chargeCounterUah = if (chargeCounterRaw > 0L) chargeCounterRaw else -1L
-    val estimatedCapacityMah =
-      if (chargeCounterUah > 0L && levelPercent >= 15) {
-        ((chargeCounterUah / 1000.0) / (levelPercent / 100.0)).toInt().coerceIn(1500, 12000)
-      } else {
-        prefs.observedCapacityMah
-      }
-
-    val designBaseline =
-      if (prefs.designCapacityBaselineMah > 0) {
-        prefs.designCapacityBaselineMah
-      } else {
-        maxOf(prefs.observedCapacityMah, estimatedCapacityMah)
-      }
-
-    var cumulativeChargedPct = prefs.cumulativeChargedPercent
-    if (isCharging && prefs.lastChargeLevelForCycles >= 0 && levelPercent > prefs.lastChargeLevelForCycles) {
-      val deltaPct = (levelPercent - prefs.lastChargeLevelForCycles).coerceIn(0, 100)
-      cumulativeChargedPct += deltaPct.toFloat()
-    }
-
-    if (levelPercent != prefs.lastChargeLevelForCycles ||
-      prefs.designCapacityBaselineMah == 0 ||
-      cumulativeChargedPct != prefs.cumulativeChargedPercent
-    ) {
-      preferencesRepository.updateCycleTracking(
-        cumulativeChargedPercent = cumulativeChargedPct,
-        lastChargeLevel = levelPercent,
-        designCapacityBaselineMah = if (prefs.designCapacityBaselineMah == 0) designBaseline else null,
-      )
-    }
-
-
+    val estimatedCapacityMah = if (chargeCounterUah > 0L && levelPercent in 15..100) {
+      ((chargeCounterUah / 1000.0) / (levelPercent / 100.0)).toInt()
+    } else -1
+    // No API-backed design baseline exists here. Old seeded baselines are not evidence.
+    // Preserve old records, but never derive health/wear from them or infer lifetime cycles.
     val dayBucket = nowMillis / MILLIS_PER_DAY
     val dao = appDatabase.netraDao()
     val existingToday = dao.getBatteryHealthLogForDay(dayBucket)
-    if (existingToday != null) {
+    if (existingToday?.sourceLabel?.startsWith("OBSERVED_V2") == true) {
       _latestEntry.value = existingToday
       return@withLock BatteryLifecycleResult(
         loggedNewEntry = false,
@@ -140,27 +112,11 @@ class BatteryLifecycleEstimator @Inject constructor(
         -1
       }
 
-    val estimatedCycleCount =
-      if (osCycleCount >= 0) osCycleCount.toFloat()
-      else (cumulativeChargedPct / 100f).coerceAtLeast(0f)
-
-    val sourceLabel =
-      when {
-        osCycleCount >= 0 && chargeCounterUah > 0L -> "OS_CYCLE_AND_COULOMB"
-        osCycleCount >= 0 -> "OS_CYCLE_COUNT"
-        chargeCounterUah > 0L -> "COULOMB_COUNTER_ESTIMATE"
-        else -> "LEVEL_DELTA_ESTIMATE"
-      }
-
-    val effectiveDesignMah = maxOf(designBaseline, prefs.observedCapacityMah)
-    val degradationPercent =
-      if (effectiveDesignMah > 0) {
-        (((effectiveDesignMah - estimatedCapacityMah).toFloat() / effectiveDesignMah.toFloat()) * 100f)
-          .coerceIn(0f, 99f)
-      } else {
-        0f
-      }
-    val healthPercent = (100f - degradationPercent).coerceIn(1f, 100f)
+    val estimatedCycleCount = if (osCycleCount >= 0) osCycleCount.toFloat() else -1f
+    val sourceLabel = "OBSERVED_V2_OS_CYCLE_AND_COUNTER_OR_UNAVAILABLE"
+    val effectiveDesignMah = -1
+    val degradationPercent = -1f
+    val healthPercent = -1f
 
     val entry = BatteryHealthLogEntity(
       dayBucket = dayBucket,
@@ -175,26 +131,17 @@ class BatteryLifecycleEstimator @Inject constructor(
     dao.insertBatteryHealthLog(entry)
     _latestEntry.value = entry
 
-    val cycleStr = String.format(Locale.US, "%.2f", estimatedCycleCount)
-    val degStr = String.format(Locale.US, "%.1f", degradationPercent)
-    val healthStr = String.format(Locale.US, "%.1f", healthPercent)
-    logWriter.append(
-      "CYCLE_HEALTH",
-      "Daily charging check: cycles=$cycleStr, est=${estimatedCapacityMah}mAh/${effectiveDesignMah}mAh, wear=$degStr%, health=$healthStr%, source=$sourceLabel",
-    )
-    dao.insertActivityLog(
-      ActivityLogEntity(
-        timestampMillis = nowMillis,
-        category = LogCategory.BATTERY.name,
-        severity = if (degradationPercent >= 20f) LogSeverity.WARNING.name else LogSeverity.INFO.name,
-        titleEn = "Daily Battery Health & Cycle Log",
-        titleHi = "दैनिक बैटरी चक्र और क्षमता लॉग",
-        detailEn = "Cycles: $cycleStr • Est. Capacity: $estimatedCapacityMah / $effectiveDesignMah mAh • Degradation: $degStr% ($healthStr% health).",
-        detailHi = "चक्र: $cycleStr • अनुमानित क्षमता: $estimatedCapacityMah / $effectiveDesignMah mAh • क्षरण: $degStr% ($healthStr% स्वास्थ्य)।",
-        whyEn = "Logged once per day while charging using BatteryManager coulomb/cycle metrics with minimal battery overhead.",
-        whyHi = "चार्जिंग के दौरान प्रतिदिन केवल एक बार BatteryManager डेटा से बैटरी स्वास्थ्य और चक्र दर्ज किए जाते हैं।",
-      )
-    )
+    val cycleStr = if (estimatedCycleCount >= 0) estimatedCycleCount.toInt().toString() else "Unavailable"
+    val capacityStr = if (estimatedCapacityMah > 0) "approximately ${estimatedCapacityMah}mAh" else "Unavailable"
+    logWriter.append("CYCLE_HEALTH", "Observed daily check: OS cycles=$cycleStr; capacity=$capacityStr; design/wear/health=Unavailable")
+    dao.insertActivityLog(ActivityLogEntity(
+      timestampMillis = nowMillis, category = LogCategory.BATTERY.name, severity = LogSeverity.INFO.name,
+      titleEn = "Daily Battery Observation", titleHi = "दैनिक बैटरी मापन",
+      detailEn = "OS cycles: $cycleStr; capacity: $capacityStr. Design capacity, wear and health: Unavailable.",
+      detailHi = "OS cycles: $cycleStr; capacity: $capacityStr. Design capacity, wear and health: Unavailable.",
+      whyEn = "Only Android-reported cycle count and counter-derived approximate capacity. No assumed design baseline.",
+      whyHi = "केवल Android का चक्र और काउंटर आधारित अनुमान। काल्पनिक क्षमता का उपयोग नहीं।",
+    ))
 
     BatteryLifecycleResult(
       loggedNewEntry = true,
