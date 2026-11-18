@@ -53,6 +53,9 @@ data class UserPreferences(
   val lastScreenOffTimestamp: Long = 0L,
   val below35SinceMillis: Long = 0L,
   val observedCapacityMah: Int = 4500,
+  val cumulativeChargedPercent: Float = 0f,
+  val designCapacityBaselineMah: Int = 0,
+  val lastChargeLevelForCycles: Int = -1,
 )
 
 @Singleton
@@ -87,6 +90,9 @@ class PreferencesRepository @Inject constructor(
     val LAST_SCREEN_OFF_TIME = longPreferencesKey("last_screen_off_time")
     val BELOW_35_SINCE = longPreferencesKey("below_35_since")
     val OBSERVED_CAPACITY_MAH = intPreferencesKey("observed_capacity_mah")
+    val CUMULATIVE_CHARGED_PCT = floatPreferencesKey("cumulative_charged_pct")
+    val DESIGN_CAPACITY_BASELINE_MAH = intPreferencesKey("design_capacity_baseline_mah")
+    val LAST_CHARGE_LEVEL_FOR_CYCLES = intPreferencesKey("last_charge_level_for_cycles")
   }
 
   val preferences: Flow<UserPreferences> =
@@ -126,6 +132,9 @@ class PreferencesRepository @Inject constructor(
           lastScreenOffTimestamp = p[Keys.LAST_SCREEN_OFF_TIME] ?: 0L,
           below35SinceMillis = p[Keys.BELOW_35_SINCE] ?: 0L,
           observedCapacityMah = (p[Keys.OBSERVED_CAPACITY_MAH] ?: 4500).coerceIn(1500, 12000),
+          cumulativeChargedPercent = (p[Keys.CUMULATIVE_CHARGED_PCT] ?: 0f).coerceAtLeast(0f),
+          designCapacityBaselineMah = (p[Keys.DESIGN_CAPACITY_BASELINE_MAH] ?: 0).coerceAtLeast(0),
+          lastChargeLevelForCycles = p[Keys.LAST_CHARGE_LEVEL_FOR_CYCLES] ?: -1,
         )
       }
 
@@ -238,6 +247,20 @@ class PreferencesRepository @Inject constructor(
 
   suspend fun setBelow35Since(timestamp: Long) {
     context.netraDataStore.edit { it[Keys.BELOW_35_SINCE] = timestamp }
+  }
+
+  suspend fun updateCycleTracking(
+    cumulativeChargedPercent: Float,
+    lastChargeLevel: Int,
+    designCapacityBaselineMah: Int? = null,
+  ) {
+    context.netraDataStore.edit {
+      it[Keys.CUMULATIVE_CHARGED_PCT] = cumulativeChargedPercent.coerceAtLeast(0f)
+      it[Keys.LAST_CHARGE_LEVEL_FOR_CYCLES] = lastChargeLevel
+      if (designCapacityBaselineMah != null && designCapacityBaselineMah > 0) {
+        it[Keys.DESIGN_CAPACITY_BASELINE_MAH] = designCapacityBaselineMah
+      }
+    }
   }
 
   suspend fun resetAllPreferences() {

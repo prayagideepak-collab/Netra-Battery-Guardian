@@ -97,6 +97,73 @@ fun StorageScreen(
       }
     }
 
+    // Idle-Window StorageStatsManager App-Specific Disk Usage Card
+    item {
+      val report = state.diskUsageReport
+      GuardianCard(modifier = Modifier.widthIn(max = 720.dp)) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text(
+            text = if (strings.isHindi) "ऐप-विशिष्ट डिस्क उपयोग (StorageStatsManager)" else "App-Specific Disk Usage (Idle Only)",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.weight(1f),
+          )
+          StatusPill(
+            text = if (report?.executedDuringIdleWindow == true) "IDLE SCANNED" else "IDLE WINDOW",
+            color = SemanticCoolMint,
+          )
+        }
+        if (report == null) {
+          Text(
+            text = if (strings.isHindi) {
+              "DiskUsageHelper बैटरी बचाने के लिए केवल आइडल मेंटेनेंस विंडो में भारी फ़ाइलों को स्कैन करता है।"
+            } else {
+              "DiskUsageHelper scans StorageStatsManager and app directories only during OS idle maintenance windows to save battery."
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        } else {
+          Text(
+            text = "App: ${StorageInspector.formatBytes(report.selfAppBytes)} • Data: ${
+              StorageInspector.formatBytes(report.selfDataBytes)
+            } • Cache: ${StorageInspector.formatBytes(report.selfCacheBytes)}",
+            style = TelemetryMonoStyle,
+            color = MaterialTheme.colorScheme.onSurface,
+          )
+          if (report.heavyAppFiles.isNotEmpty()) {
+            Text(
+              text = if (strings.isHindi) "पहचानी गई भारी फ़ाइलें:" else "Detected Heavy App Files:",
+              style = MaterialTheme.typography.labelLarge,
+            )
+            report.heavyAppFiles.take(4).forEach { file ->
+              Text(
+                text = "• ${file.name} (${StorageInspector.formatBytes(file.sizeBytes)}) [${file.directoryKind}]",
+                style = MaterialTheme.typography.bodySmall,
+                color = SemanticWarmAmber,
+              )
+            }
+          }
+          if (report.heavyApps.isNotEmpty()) {
+            Text(
+              text = if (strings.isHindi) "भारी स्टोरेज वाले ऐप्स:" else "Heavy Storage Apps:",
+              style = MaterialTheme.typography.labelLarge,
+            )
+            report.heavyApps.take(4).forEach { app ->
+              Text(
+                text = "• ${app.appName}: Data ${StorageInspector.formatBytes(app.dataBytes)} • Cache ${StorageInspector.formatBytes(app.cacheBytes)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+              )
+            }
+          }
+        }
+      }
+    }
+
     items(st.recommendations, key = { it.id }) { rec ->
       GuardianCard(modifier = Modifier.widthIn(max = 720.dp)) {
         Row(

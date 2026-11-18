@@ -18,8 +18,10 @@ import com.example.data.local.db.AppDatabase
 import com.example.data.local.db.BatterySnapshot
 import com.example.data.local.prefs.PreferencesRepository
 import com.example.data.local.system.BatteryTelemetryCollector
+import com.example.data.local.system.DiskUsageHelper
 import com.example.data.local.system.StorageInspector
 import com.example.data.repository.BatteryHistoryRepository
+import com.example.domain.engine.BatteryLifecycleEstimator
 import com.example.domain.engine.ChargingSpeedClassifier
 import com.example.domain.engine.SelfHealingSupervisor
 import com.example.domain.model.LogCategory
@@ -37,9 +39,11 @@ class BackgroundDrainCheckWorker @AssistedInject constructor(
   private val preferencesRepository: PreferencesRepository,
   private val historyRepository: BatteryHistoryRepository,
   private val notificationHelper: NotificationHelper,
+  private val dozeModeMonitor: DozeModeMonitor,
 ) : CoroutineWorker(appContext, params) {
 
   override suspend fun doWork(): Result {
+    if (dozeModeMonitor.shouldSkipNonEssentialWork()) return Result.success()
     val prefs = preferencesRepository.preferences.first()
     val telemetry = telemetryCollector.collect(
       observedCapacityFallbackMah = prefs.observedCapacityMah,
@@ -91,11 +95,14 @@ class StorageAuditWorker @AssistedInject constructor(
   private val telemetryCollector: BatteryTelemetryCollector,
   private val preferencesRepository: PreferencesRepository,
   private val storageInspector: StorageInspector,
+  private val diskUsageHelper: DiskUsageHelper,
   private val historyRepository: BatteryHistoryRepository,
   private val notificationHelper: NotificationHelper,
+  private val dozeModeMonitor: DozeModeMonitor,
 ) : CoroutineWorker(appContext, params) {
 
   override suspend fun doWork(): Result {
+    if (dozeModeMonitor.shouldSkipNonEssentialWork()) return Result.success()
     val prefs = preferencesRepository.preferences.first()
     val telemetry = telemetryCollector.collect(
       observedCapacityFallbackMah = prefs.observedCapacityMah,
@@ -105,6 +112,26 @@ class StorageAuditWorker @AssistedInject constructor(
     // Skip heavy storage work if hot >=40°C or battery <15%
     if (telemetry.temperatureCelsius >= 40f || telemetry.levelPercent < 15) {
       return Result.success()
+    }
+
+    // Run StorageStatsManager app-specific disk scan strictly in this idle maintenance window
+    val diskReport = diskUsageHelper.scanAppStorageIfIdle(
+      fromIdleWorker = true,
+      temperatureCelsius = telemetry.temperatureCelsius,
+      batteryPercent = telemetry.levelPercent,
+    )
+    if (diskReport.executedDuringIdleWindow && diskReport.heavyAppFiles.isNotEmpty()) {
+      val topHeavy = diskReport.heavyAppFiles.first()
+      historyRepository.logActivity(
+        category = LogCategory.STORAGE,
+        severity = LogSeverity.INFO,
+        titleEn = "Idle Disk Scan: ${diskReport.heavyAppFiles.size} Heavy File(s)",
+        titleHi = "आइडल डिस्क स्कैन: ${diskReport.heavyAppFiles.size} भारी फ़ाइलें",
+        detailEn = "Largest app file: ${topHeavy.name} (${StorageInspector.formatBytes(topHeavy.sizeBytes)}).",
+        detailHi = "सबसे बड़ी ऐप फ़ाइल: ${topHeavy.name} (${StorageInspector.formatBytes(topHeavy.sizeBytes)})।",
+        whyEn = "StorageStatsManager scan runs exclusively during idle maintenance windows.",
+        whyHi = "StorageStatsManager स्कैन केवल आइडल मेंटेनेंस विंडो में चलता है।",
+      )
     }
 
     val insight = storageInspector.inspect(telemetry.temperatureCelsius, telemetry.levelPercent)
@@ -154,9 +181,11 @@ class DataRetentionWorker @AssistedInject constructor(
   @Assisted params: WorkerParameters,
   private val preferencesRepository: PreferencesRepository,
   private val historyRepository: BatteryHistoryRepository,
+  private val dozeModeMonitor: DozeModeMonitor,
 ) : CoroutineWorker(appContext, params) {
 
   override suspend fun doWork(): Result {
+    if (dozeModeMonitor.shouldSkipNonEssentialWork()) return Result.success()
     val prefs = preferencesRepository.preferences.first()
     historyRepository.pruneOldData(prefs.dataRetentionDays)
     return Result.success()
@@ -168,10 +197,31 @@ class GuardianHealthCheckWorker @AssistedInject constructor(
   @Assisted appContext: Context,
   @Assisted params: WorkerParameters,
   private val selfHealingSupervisor: SelfHealingSupervisor,
+  private val dozeModeMonitor: DozeModeMonitor,
 ) : CoroutineWorker(appContext, params) {
 
   override suspend fun doWork(): Result {
+    if (dozeModeMonitor.shouldSkipNonEssentialWork()) return Result.success()
     selfHealingSupervisor.runNaturalHealthCheck(triggerSource = "workmanager_window")
+    return Result.success()
+  }
+}
+
+/**
+ * Runs once per day with charging constraint to estimate and log long-term battery
+ * cycle counts and capacity degradation metrics without idle battery drain.
+ */
+@HiltWorker
+class DailyBatteryHealthWorker @AssistedInject constructor(
+  @Assisted appContext: Context,
+  @Assisted params: WorkerParameters,
+  private val batteryLifecycleEstimator: BatteryLifecycleEstimator,
+  private val dozeModeMonitor: DozeModeMonitor,
+) : CoroutineWorker(appContext, params) {
+
+  override suspend fun doWork(): Result {
+    if (dozeModeMonitor.shouldSkipNonEssentialWork()) return Result.success()
+    batteryLifecycleEstimator.evaluateAndLogDailyWhileCharging()
     return Result.success()
   }
 }
@@ -244,6 +294,19 @@ object NetraWorkScheduler {
   const val WORK_SCREEN_OFF_DRAIN = "netra_screen_off_drain"
   const val WORK_HEALTH_CHECK = "netra_health_check"
   const val WORK_IDLE_BATTERY_PERSISTENCE = "netra_idle_battery_persistence"
+  const val WORK_DAILY_BATTERY_HEALTH = "netra_daily_battery_health"
+
+  fun buildDailyBatteryHealthRequest(): PeriodicWorkRequest {
+    val chargingConstraints =
+      Constraints.Builder()
+        .setRequiresCharging(true)
+        .setRequiresBatteryNotLow(true)
+        .build()
+
+    return PeriodicWorkRequestBuilder<DailyBatteryHealthWorker>(24, TimeUnit.HOURS)
+      .setConstraints(chargingConstraints)
+      .build()
+  }
 
   fun buildIdlePersistenceRequest(): PeriodicWorkRequest {
     val idleConstraints =
@@ -257,6 +320,18 @@ object NetraWorkScheduler {
       .build()
   }
 
+  fun buildStorageAuditRequest(): PeriodicWorkRequest {
+    val idleStorageConstraints =
+      Constraints.Builder()
+        .setRequiresDeviceIdle(true)
+        .setRequiresBatteryNotLow(true)
+        .build()
+
+    return PeriodicWorkRequestBuilder<StorageAuditWorker>(12, TimeUnit.HOURS)
+      .setConstraints(idleStorageConstraints)
+      .build()
+  }
+
   fun schedulePeriodicMaintenance(context: Context) {
     val wm = WorkManager.getInstance(context)
 
@@ -266,21 +341,16 @@ object NetraWorkScheduler {
       buildIdlePersistenceRequest(),
     )
 
-    val storageConstraints =
-      Constraints.Builder()
-        .setRequiresBatteryNotLow(true)
-        .build()
-
-    val storageRequest =
-      PeriodicWorkRequestBuilder<StorageAuditWorker>(12, TimeUnit.HOURS)
-        .setConstraints(storageConstraints)
-        .build()
-
     wm.enqueueUniquePeriodicWork(
       WORK_STORAGE_AUDIT,
       ExistingPeriodicWorkPolicy.KEEP,
-      storageRequest,
+      buildStorageAuditRequest(),
     )
+
+    val healthConstraints =
+      Constraints.Builder()
+        .setRequiresBatteryNotLow(true)
+        .build()
 
     val retentionConstraints =
       Constraints.Builder()
@@ -301,13 +371,19 @@ object NetraWorkScheduler {
 
     val healthRequest =
       PeriodicWorkRequestBuilder<GuardianHealthCheckWorker>(6, TimeUnit.HOURS)
-        .setConstraints(storageConstraints)
+        .setConstraints(healthConstraints)
         .build()
 
     wm.enqueueUniquePeriodicWork(
       WORK_HEALTH_CHECK,
       ExistingPeriodicWorkPolicy.KEEP,
       healthRequest,
+    )
+
+    wm.enqueueUniquePeriodicWork(
+      WORK_DAILY_BATTERY_HEALTH,
+      ExistingPeriodicWorkPolicy.KEEP,
+      buildDailyBatteryHealthRequest(),
     )
   }
 

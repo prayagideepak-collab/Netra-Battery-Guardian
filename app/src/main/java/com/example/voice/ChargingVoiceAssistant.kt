@@ -2,20 +2,43 @@ package com.example.voice
 
 import android.content.Context
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import com.example.data.local.prefs.UserPreferences
 import com.example.domain.model.AppLanguage
 import com.example.domain.model.ChargingSpeedClass
 import com.example.service.NotificationHelper
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import java.util.Calendar
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
+data class ChargingAssistantState(
+  val isTtsBound: Boolean = false,
+  val lastMilestoneLevel: Int? = null,
+  val lastSpokenMessage: String? = null,
+  val lastSkippedReason: String? = null,
+  val announcementCount: Int = 0,
+)
+
+/**
+ * Resource-minimal offline Text-to-Speech charging assistant.
+ *
+ * - Lazily initializes [TextToSpeech] only when an eligible announcement triggers.
+ * - Releases/shuts down the TTS engine automatically after a brief idle window so no
+ *   persistent TTS service binder consumes memory or battery.
+ * - Battery milestone announcements strictly trigger ONLY while charging AND screen is on.
+ */
 @Singleton
 class ChargingVoiceAssistant @Inject constructor(
-  @ApplicationContext private val context: Context,
+  @param:ApplicationContext private val context: Context,
   private val notificationHelper: NotificationHelper,
 ) : TextToSpeech.OnInitListener {
 
@@ -25,24 +48,76 @@ class ChargingVoiceAssistant @Inject constructor(
 
   private val lastSpokenByKey = mutableMapOf<String, Long>()
   private var currentLocaleLang: AppLanguage? = null
+  private var pendingUtterance: PendingUtterance? = null
+
+  private val mainHandler = Handler(Looper.getMainLooper())
+  private val autoShutdownRunnable = Runnable { shutdown() }
+
+  private val _assistantState = MutableStateFlow(ChargingAssistantState())
+  val assistantState: StateFlow<ChargingAssistantState> = _assistantState.asStateFlow()
+
+  private data class PendingUtterance(
+    val key: String,
+    val message: String,
+    val prefs: UserPreferences,
+    val urgent: Boolean,
+    val fallbackTitle: String,
+  )
 
   fun ensureInitialized() {
     if (tts == null && !initFailed) {
       runCatching {
-        tts = TextToSpeech(context, this)
+        val engine = TextToSpeech(context, this)
+        engine.setOnUtteranceProgressListener(
+          object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {
+              mainHandler.removeCallbacks(autoShutdownRunnable)
+            }
+
+            override fun onDone(utteranceId: String?) {
+              scheduleIdleShutdown()
+            }
+
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String?) {
+              scheduleIdleShutdown()
+            }
+          }
+        )
+        tts = engine
+        _assistantState.update { it.copy(isTtsBound = true) }
       }.onFailure {
         initFailed = true
       }
     }
   }
 
+  private fun scheduleIdleShutdown() {
+    mainHandler.removeCallbacks(autoShutdownRunnable)
+    mainHandler.postDelayed(autoShutdownRunnable, IDLE_SHUTDOWN_DELAY_MS)
+  }
+
+  @Synchronized
   override fun onInit(status: Int) {
     if (status == TextToSpeech.SUCCESS) {
       isReady = true
       applyLocale(currentLocaleLang ?: AppLanguage.ENGLISH)
+      pendingUtterance?.let { pending ->
+        pendingUtterance = null
+        dispatchToTtsEngine(pending.key, pending.message, pending.prefs, pending.urgent, pending.fallbackTitle)
+      } ?: scheduleIdleShutdown()
     } else {
       isReady = false
       initFailed = true
+      pendingUtterance?.let { pending ->
+        pendingUtterance = null
+        if (pending.urgent) {
+          notificationHelper.postCriticalAlert(NotificationHelper.ID_TTS_FALLBACK, pending.fallbackTitle, pending.message)
+        } else {
+          notificationHelper.postAdvisory(NotificationHelper.ID_TTS_FALLBACK, pending.fallbackTitle, pending.message)
+        }
+      }
+      shutdown()
     }
   }
 
@@ -50,8 +125,8 @@ class ChargingVoiceAssistant @Inject constructor(
     val engine = tts ?: return
     val locale =
       when (language) {
-        AppLanguage.HINDI -> Locale("hi", "IN")
-        AppLanguage.HINGLISH -> Locale("en", "IN")
+        AppLanguage.HINDI -> Locale.forLanguageTag("hi-IN")
+        AppLanguage.HINGLISH -> Locale.forLanguageTag("en-IN")
         AppLanguage.ENGLISH -> Locale.US
       }
     val res = engine.setLanguage(locale)
@@ -70,7 +145,6 @@ class ChargingVoiceAssistant @Inject constructor(
     return if (start <= end) {
       minuteOfDay in start until end
     } else {
-      // Wraps midnight (e.g., 23:00 to 06:00)
       minuteOfDay >= start || minuteOfDay < end
     }
   }
@@ -80,7 +154,6 @@ class ChargingVoiceAssistant @Inject constructor(
     prefs: UserPreferences,
     screenOn: Boolean,
   ) {
-    // Never suppressed by Night Silent Mode
     val text =
       when (prefs.voiceLanguage) {
         AppLanguage.ENGLISH -> {
@@ -132,14 +205,13 @@ class ChargingVoiceAssistant @Inject constructor(
       prefs = prefs,
       urgent = true,
       bypassNightSilent = true,
-      bypassScreenOffRule = true,
+      bypassScreenOffRule = false,
       screenOn = screenOn,
       fallbackTitle = "Netra Charging",
     )
   }
 
   fun announceChargerDisconnected(prefs: UserPreferences, screenOn: Boolean) {
-    // Must work at ANY time including Night Silent Mode
     val text =
       when (prefs.voiceLanguage) {
         AppLanguage.ENGLISH -> "Charger disconnected. Battery mode active."
@@ -158,38 +230,57 @@ class ChargingVoiceAssistant @Inject constructor(
     )
   }
 
-  fun announceChargingMilestone(level: Int, prefs: UserPreferences, screenOn: Boolean) {
+  /**
+   * Announces a charging battery milestone (e.g., reached 80% charge) using minimal TTS resources.
+   * Strictly only triggers when [isCharging] is true AND [screenOn] is true.
+   */
+  fun announceChargingMilestone(
+    level: Int,
+    prefs: UserPreferences,
+    screenOn: Boolean,
+    isCharging: Boolean = true,
+  ) {
+    if (!isCharging || !screenOn) {
+      _assistantState.update {
+        it.copy(
+          lastSkippedReason = if (!isCharging) "Skipped: not charging" else "Skipped: screen off",
+        )
+      }
+      return
+    }
     if (!prefs.announceCharging) return
-    val isFull = level == 100
-    // Night silent suppresses C5-C95, keeps full-battery alert
+    val isFull = level >= 100
     if (isNightSilentActive(prefs) && !isFull) return
 
     val code = "C$level"
     val text =
-      if (isFull) {
-        when (prefs.voiceLanguage) {
-          AppLanguage.ENGLISH -> "C100. Battery is fully charged. You can disconnect the charger."
-          AppLanguage.HINDI -> "C100. बैटरी पूरी चार्ज हो गई है। आप चार्जर हटा सकते हैं।"
-          AppLanguage.HINGLISH -> "C100. Battery full charge ho gayi hai. Charger hata sakte hain."
-        }
-      } else {
-        code
+      when (prefs.voiceLanguage) {
+        AppLanguage.ENGLISH ->
+          if (isFull) "Reached 100 percent charge. Battery is fully charged."
+          else "Reached $level percent charge."
+        AppLanguage.HINDI ->
+          if (isFull) "100 प्रतिशत चार्ज पूरा हो गया है। बैटरी फुल है।"
+          else "बैटरी $level प्रतिशत चार्ज हो गई है।"
+        AppLanguage.HINGLISH ->
+          if (isFull) "100 percent charge ho gaya hai. Battery full hai."
+          else "Battery $level percent charge ho gayi hai."
       }
+
     speak(
       key = "milestone_$code",
       message = text,
       prefs = prefs,
       urgent = isFull,
       bypassNightSilent = isFull,
-      bypassScreenOffRule = isFull,
+      bypassScreenOffRule = false,
       screenOn = screenOn,
       fallbackTitle = "Netra Charge $code",
+      milestoneLevel = level,
     )
   }
 
   fun announceDischargingMilestone(level: Int, prefs: UserPreferences, screenOn: Boolean) {
     if (!prefs.announceDischarging) return
-    // Night silent suppresses all D100-D1 percentage announcements
     if (isNightSilentActive(prefs)) return
 
     val code = "D$level"
@@ -271,32 +362,58 @@ class ChargingVoiceAssistant @Inject constructor(
     bypassScreenOffRule: Boolean,
     screenOn: Boolean,
     fallbackTitle: String,
+    milestoneLevel: Int? = null,
   ) {
     if (!prefs.voiceEnabled) {
       if (urgent) notificationHelper.postCriticalAlert(NotificationHelper.ID_TTS_FALLBACK, fallbackTitle, message)
       return
     }
     if (!bypassNightSilent && isNightSilentActive(prefs)) return
-    if (!bypassScreenOffRule && !screenOn && !prefs.announceWhileScreenOff) return
+    if (!bypassScreenOffRule && !screenOn) {
+      _assistantState.update { it.copy(lastSkippedReason = "Skipped: screen off") }
+      return
+    }
 
     val now = System.currentTimeMillis()
     val last = lastSpokenByKey[key] ?: 0L
-    // 30-second debounce rule
     if (now - last < 30_000L) return
     lastSpokenByKey[key] = now
 
-    ensureInitialized()
-    val engine = tts
-    if (engine == null || !isReady || initFailed) {
-      // Fallback to notification when TTS is unavailable
-      if (urgent) {
-        notificationHelper.postCriticalAlert(NotificationHelper.ID_TTS_FALLBACK, fallbackTitle, message)
-      } else {
-        notificationHelper.postAdvisory(NotificationHelper.ID_TTS_FALLBACK, fallbackTitle, message)
+    _assistantState.update {
+      it.copy(
+        lastMilestoneLevel = milestoneLevel ?: it.lastMilestoneLevel,
+        lastSpokenMessage = message,
+        lastSkippedReason = null,
+        announcementCount = it.announcementCount + 1,
+      )
+    }
+
+    if (initFailed) {
+      postFallbackNotification(urgent, fallbackTitle, message)
+      return
+    }
+
+    if (tts == null || !isReady) {
+      pendingUtterance = PendingUtterance(key, message, prefs, urgent, fallbackTitle)
+      ensureInitialized()
+      if (initFailed) {
+        pendingUtterance = null
+        postFallbackNotification(urgent, fallbackTitle, message)
       }
       return
     }
 
+    dispatchToTtsEngine(key, message, prefs, urgent, fallbackTitle)
+  }
+
+  private fun dispatchToTtsEngine(
+    key: String,
+    message: String,
+    prefs: UserPreferences,
+    urgent: Boolean,
+    fallbackTitle: String,
+  ) {
+    val engine = tts ?: return
     if (currentLocaleLang != prefs.voiceLanguage) {
       applyLocale(prefs.voiceLanguage)
     }
@@ -308,14 +425,33 @@ class ChargingVoiceAssistant @Inject constructor(
     val queueMode = if (urgent) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
     val result = engine.speak(message, queueMode, params, key)
     if (result == TextToSpeech.ERROR) {
-      notificationHelper.postAdvisory(NotificationHelper.ID_TTS_FALLBACK, fallbackTitle, message)
+      postFallbackNotification(urgent, fallbackTitle, message)
+    }
+    scheduleIdleShutdown()
+  }
+
+  private fun postFallbackNotification(urgent: Boolean, title: String, message: String) {
+    if (urgent) {
+      notificationHelper.postCriticalAlert(NotificationHelper.ID_TTS_FALLBACK, title, message)
+    } else {
+      notificationHelper.postAdvisory(NotificationHelper.ID_TTS_FALLBACK, title, message)
     }
   }
 
+  @Synchronized
   fun shutdown() {
-    tts?.stop()
-    tts?.shutdown()
+    mainHandler.removeCallbacks(autoShutdownRunnable)
+    pendingUtterance = null
+    runCatching {
+      tts?.stop()
+      tts?.shutdown()
+    }
     tts = null
     isReady = false
+    _assistantState.update { it.copy(isTtsBound = false) }
+  }
+
+  companion object {
+    const val IDLE_SHUTDOWN_DELAY_MS = 20_000L
   }
 }

@@ -26,8 +26,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.domain.engine.PowerGovernanceRegistry
+import com.example.domain.model.AdaptivePowerTier
 import com.example.ui.NetraUiState
 import com.example.ui.components.GuardianCard
+import com.example.ui.components.HourlyTempVoltageChart
 import com.example.ui.components.StatusPill
 import com.example.ui.components.TelemetryLineChart
 import com.example.ui.components.WhyExplainChip
@@ -155,6 +157,18 @@ fun BatteryScreen(
           )
         }
         Text(
+          text = "Doze Mode: ${if (state.dozeState.isInDozeMode) "IN DOZE (Non-essential paused)" else "ACTIVE"} • Transitions In/Out: ${state.dozeState.enterDozeCount}/${state.dozeState.exitDozeCount}",
+          style = TelemetryMonoStyle,
+          color = if (state.dozeState.isInDozeMode) SemanticWarmAmber else MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.testTag("doze_guard_status_pill"),
+        )
+        Text(
+          text = "Doze Mode: ${if (state.dozeState.isInDozeMode) "IN DOZE (Non-essential paused)" else "ACTIVE"} • Transitions In/Out: ${state.dozeState.enterDozeCount}/${state.dozeState.exitDozeCount}",
+          style = TelemetryMonoStyle,
+          color = if (state.dozeState.isInDozeMode) SemanticWarmAmber else MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.testTag("doze_guard_status_pill"),
+        )
+        Text(
           text = "Self-Healing: ${sh.lastCheckSummary} (Retries ${sh.consecutiveFailures}/${sh.maxRetries}, Circuit ${if (sh.circuitOpen) "OPEN" else "CLOSED"}) • Log: ${sh.rotatedLogBytes / 1024} KB / 256 KB",
           style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -165,6 +179,106 @@ fun BatteryScreen(
         ) {
           Text(if (strings.isHindi) "Tier-0 और फ़ीचर गेट देखें" else "View Tier-0 & Feature Gate Spec")
         }
+      }
+    }
+
+    // Long-Term Battery Cycle Count & Capacity Degradation (Logged Daily While Charging)
+    item {
+      val latestHealth = state.batteryHealthLogs.firstOrNull()
+      val cyclesText =
+        if (latestHealth != null) String.format(Locale.US, "%.2f", latestHealth.estimatedCycleCount)
+        else String.format(Locale.US, "%.2f", state.prefs.cumulativeChargedPercent / 100f)
+      val estMah = latestHealth?.estimatedCapacityMah ?: t.estimatedCapacityMah
+      val designMah =
+        latestHealth?.designCapacityMah
+          ?: state.prefs.designCapacityBaselineMah.takeIf { it > 0 }
+          ?: state.prefs.observedCapacityMah
+      val degPct =
+        latestHealth?.degradationPercent
+          ?: if (designMah > 0) (((designMah - estMah).toFloat() / designMah.toFloat()) * 100f).coerceIn(0f, 99f) else 0f
+      val healthPct = latestHealth?.healthPercent ?: (100f - degPct).coerceIn(1f, 100f)
+
+      GuardianCard(modifier = Modifier.widthIn(max = 720.dp).testTag("battery_cycle_health_card")) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text(
+            text = if (strings.isHindi) "बैटरी चक्र और क्षमता क्षरण" else "Battery Cycles & Degradation",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.weight(1f),
+          )
+          StatusPill(
+            text = "${String.format(Locale.US, "%.1f", healthPct)}% Health",
+            color = if (degPct >= 20f) SemanticWarmAmber else SemanticCoolMint,
+          )
+        }
+        Text(
+          text = "Est. Cycles: $cyclesText • Capacity: $estMah / $designMah mAh • Wear: ${String.format(Locale.US, "%.1f", degPct)}%",
+          style = TelemetryMonoStyle,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+          text = if (latestHealth != null) {
+            "Logged daily while charging (${state.batteryHealthLogs.size} day record(s) • Source: ${latestHealth.sourceLabel})"
+          } else {
+            if (strings.isHindi) "चार्जिंग के दौरान प्रतिदिन एक बार चक्र और क्षमता लॉग की जाती है।"
+            else "Evaluated & logged once per day while charging via BatteryManager metrics."
+          },
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      }
+    }
+
+    // Long-Term Battery Cycle Count & Capacity Degradation (Logged Daily While Charging)
+    item {
+      val latestHealth = state.batteryHealthLogs.firstOrNull()
+      val cyclesText =
+        if (latestHealth != null) String.format(Locale.US, "%.2f", latestHealth.estimatedCycleCount)
+        else String.format(Locale.US, "%.2f", state.prefs.cumulativeChargedPercent / 100f)
+      val estMah = latestHealth?.estimatedCapacityMah ?: t.estimatedCapacityMah
+      val designMah =
+        latestHealth?.designCapacityMah
+          ?: state.prefs.designCapacityBaselineMah.takeIf { it > 0 }
+          ?: state.prefs.observedCapacityMah
+      val degPct =
+        latestHealth?.degradationPercent
+          ?: if (designMah > 0) (((designMah - estMah).toFloat() / designMah.toFloat()) * 100f).coerceIn(0f, 99f) else 0f
+      val healthPct = latestHealth?.healthPercent ?: (100f - degPct).coerceIn(1f, 100f)
+
+      GuardianCard(modifier = Modifier.widthIn(max = 720.dp).testTag("battery_cycle_health_card")) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text(
+            text = if (strings.isHindi) "बैटरी चक्र और क्षमता क्षरण" else "Battery Cycles & Degradation",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.weight(1f),
+          )
+          StatusPill(
+            text = "${String.format(Locale.US, "%.1f", healthPct)}% Health",
+            color = if (degPct >= 20f) SemanticWarmAmber else SemanticCoolMint,
+          )
+        }
+        Text(
+          text = "Est. Cycles: $cyclesText • Capacity: $estMah / $designMah mAh • Wear: ${String.format(Locale.US, "%.1f", degPct)}%",
+          style = TelemetryMonoStyle,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+          text = if (latestHealth != null) {
+            "Logged daily while charging (${state.batteryHealthLogs.size} day record(s) • Source: ${latestHealth.sourceLabel})"
+          } else {
+            if (strings.isHindi) "चार्जिंग के दौरान प्रतिदिन एक बार चक्र और क्षमता लॉग की जाती है।"
+            else "Evaluated & logged once per day while charging via BatteryManager metrics."
+          },
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
       }
     }
 
@@ -213,6 +327,21 @@ fun BatteryScreen(
           maxRange = 55f,
           lineColor = SemanticWarmAmber,
           emptyMessage = if (strings.isHindi) "तापमान डेटा संकलित हो रहा है।" else "Collecting local thermal timeline.",
+        )
+      }
+    }
+
+    // Hourly Battery Temperature & Voltage Canvas History (Room Database)
+    item {
+      GuardianCard(modifier = Modifier.widthIn(max = 720.dp)) {
+        Text(
+          text = if (strings.isHindi) "प्रति घंटा तापमान और वोल्टेज इतिहास (Room)" else "Hourly Temperature & Voltage History (Room)",
+          style = MaterialTheme.typography.titleMedium,
+        )
+        HourlyTempVoltageChart(
+          snapshots = state.hourlySnapshots,
+          isHindi = strings.isHindi,
+          isLowPowerSurvival = state.powerBudget.activeTier == AdaptivePowerTier.SURVIVAL,
         )
       }
     }

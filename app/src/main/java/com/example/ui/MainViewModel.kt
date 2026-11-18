@@ -9,6 +9,7 @@ import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.db.ActivityLogEntity
+import com.example.data.local.db.BatteryHealthLogEntity
 import com.example.data.local.db.BatterySnapshot
 import com.example.data.local.db.ChargingSessionEntity
 import com.example.data.local.db.DischargeSessionEntity
@@ -16,11 +17,14 @@ import com.example.data.local.prefs.PreferencesRepository
 import com.example.data.local.prefs.UserPreferences
 import com.example.data.local.system.AppPowerInspector
 import com.example.data.local.system.BatteryTelemetryCollector
+import com.example.data.local.system.DiskUsageHelper
+import com.example.data.local.system.DiskUsageReport
 import com.example.data.local.system.LocalReportExporter
 import com.example.data.local.system.StorageInspector
 import com.example.data.repository.BatteryHistoryRepository
 import com.example.domain.engine.AdaptivePowerTierEngine
 import com.example.domain.engine.AutomationRulesEngine
+import com.example.domain.engine.BatteryLifecycleEstimator
 import com.example.domain.engine.ChargingSpeedClassifier
 import com.example.domain.engine.HeatingDiagnosisEngine
 import com.example.domain.engine.SelfHealingSupervisor
@@ -42,16 +46,23 @@ import com.example.domain.model.StorageInsight
 import com.example.domain.model.ThemeMode
 import com.example.service.BatteryGuardianService
 import com.example.service.BatteryMonitoringService
+import com.example.service.DozeModeMonitor
+import com.example.service.DozeMonitorState
+import com.example.service.ThermalMonitor
+import com.example.service.ThermalMonitorState
 import com.example.voice.ChargingVoiceAssistant
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -77,6 +88,10 @@ data class NetraUiState(
   val activityLogs: List<ActivityLogEntity> = emptyList(),
   val prefs: UserPreferences = UserPreferences(),
   val selfHealingStatus: SelfHealingStatus = SelfHealingStatus(),
+  val thermalState: ThermalMonitorState = ThermalMonitorState(),
+  val dozeState: DozeMonitorState = DozeMonitorState(),
+  val batteryHealthLogs: List<BatteryHealthLogEntity> = emptyList(),
+  val diskUsageReport: DiskUsageReport? = null,
   val statusMessage: String? = null,
   val isNightSilentActive: Boolean = false,
 )
@@ -87,6 +102,7 @@ class MainViewModel @Inject constructor(
   private val telemetryCollector: BatteryTelemetryCollector,
   private val appPowerInspector: AppPowerInspector,
   private val storageInspector: StorageInspector,
+  private val diskUsageHelper: DiskUsageHelper,
   private val chargingClassifier: ChargingSpeedClassifier,
   private val heatingDiagnosisEngine: HeatingDiagnosisEngine,
   private val adaptivePowerTierEngine: AdaptivePowerTierEngine,
@@ -96,10 +112,16 @@ class MainViewModel @Inject constructor(
   private val historyRepository: BatteryHistoryRepository,
   private val voiceAssistant: ChargingVoiceAssistant,
   private val reportExporter: LocalReportExporter,
+  private val thermalMonitor: ThermalMonitor,
+  private val dozeModeMonitor: DozeModeMonitor,
+  private val batteryLifecycleEstimator: BatteryLifecycleEstimator,
 ) : AndroidViewModel(app) {
 
   private val _uiState = MutableStateFlow(NetraUiState())
   val uiState: StateFlow<NetraUiState> = _uiState.asStateFlow()
+
+  private val _isUiVisible = MutableStateFlow(false)
+  val isUiVisible: StateFlow<Boolean> = _isUiVisible.asStateFlow()
 
   private var wakeupsThisHour = 0
   private var wakeupHourBucket = currentHourBucket()
@@ -117,7 +139,6 @@ class MainViewModel @Inject constructor(
     }
 
   init {
-    voiceAssistant.ensureInitialized()
     observeDatabaseAndPreferences()
     viewModelScope.launch {
       val health = selfHealingSupervisor.runNaturalHealthCheck(triggerSource = "app_launch")
@@ -126,38 +147,72 @@ class MainViewModel @Inject constructor(
     refreshNow(intentOverride = null, forceSnapshot = true)
   }
 
+  @OptIn(ExperimentalCoroutinesApi::class)
   private fun observeDatabaseAndPreferences() {
     val startOfDay = startOfDayMillis()
     viewModelScope.launch {
       combine(
         preferencesRepository.preferences,
-        historyRepository.observe24HourSnapshots(),
-        historyRepository.observe7DaySnapshots(),
-        historyRepository.observeRecentChargingSessions(),
-        historyRepository.observeRecentDischargeSessions(),
-      ) { prefs, s24, s7d, chargeSess, dischargeSess ->
-        Tuple5(prefs, s24, s7d, chargeSess, dischargeSess)
-      }.combine(
-        combine(
-          historyRepository.observeActivityLogs(),
-          historyRepository.observeSnapshotsTodayCount(startOfDay),
-          historyRepository.observeHourlySnapshots(),
-        ) { logs, countToday, hourly -> Triple(logs, countToday, hourly) }
-      ) { (prefs, s24, s7d, chargeSess, dischargeSess), (logs, countToday, hourly) ->
-        _uiState.update { state ->
-          state.copy(
-            prefs = prefs,
-            snapshots24h = s24,
-            snapshots7d = s7d,
-            hourlySnapshots = hourly,
-            chargingSessions = chargeSess,
-            dischargeSessions = dischargeSess,
-            activityLogs = logs,
-            powerBudget = state.powerBudget.copy(snapshotsRecordedToday = countToday),
-            isNightSilentActive = voiceAssistant.isNightSilentActive(prefs),
-          )
+        thermalMonitor.state,
+        diskUsageHelper.latestReport,
+        dozeModeMonitor.state,
+      ) { prefs, thermal, diskReport, doze -> Tuple4(prefs, thermal, diskReport, doze) }
+        .collect { (prefs, thermal, diskReport, doze) ->
+          thermalMonitor.updateSensitivity(prefs.coolingSensitivity)
+          _uiState.update { state ->
+            state.copy(
+              prefs = prefs,
+              thermalState = thermal,
+              dozeState = doze,
+              diskUsageReport = diskReport,
+              isNightSilentActive = voiceAssistant.isNightSilentActive(prefs),
+            )
+          }
         }
-      }.collect {}
+    }
+
+    // Refresh Room chart & session history ONLY while UI is visible (low-power constraint)
+    viewModelScope.launch {
+      _isUiVisible
+        .flatMapLatest { visible ->
+          if (!visible) {
+            emptyFlow()
+          } else {
+            combine(
+              historyRepository.observe24HourSnapshots(),
+              historyRepository.observe7DaySnapshots(),
+              historyRepository.observeRecentChargingSessions(),
+              historyRepository.observeRecentDischargeSessions(),
+              historyRepository.observeActivityLogs(),
+            ) { s24, s7d, chargeSess, dischargeSess, logs ->
+              Tuple5(s24, s7d, chargeSess, dischargeSess, logs)
+            }.combine(
+              combine(
+                historyRepository.observeSnapshotsTodayCount(startOfDay),
+                historyRepository.observeHourlySnapshots(),
+                historyRepository.observeBatteryHealthLogs(),
+              ) { countToday, hourly, healthLogs -> Triple(countToday, hourly, healthLogs) }
+            ) { tuple, metricsTriple ->
+              Pair(tuple, metricsTriple)
+            }
+          }
+        }
+        .collect { (tuple, metricsTriple) ->
+          val (s24, s7d, chargeSess, dischargeSess, logs) = tuple
+          val (countToday, hourly, healthLogs) = metricsTriple
+          _uiState.update { state ->
+            state.copy(
+              snapshots24h = s24,
+              snapshots7d = s7d,
+              hourlySnapshots = hourly,
+              batteryHealthLogs = healthLogs,
+              chargingSessions = chargeSess,
+              dischargeSessions = dischargeSess,
+              activityLogs = logs,
+              powerBudget = state.powerBudget.copy(snapshotsRecordedToday = countToday),
+            )
+          }
+        }
     }
   }
 
@@ -167,7 +222,7 @@ class MainViewModel @Inject constructor(
       while (isActive && isForegroundActive) {
         val intervalSec = _uiState.value.powerBudget.monitoringIntervalSeconds.coerceIn(15, 180)
         delay(intervalSec * 1000L)
-        if (isForegroundActive) {
+        if (isForegroundActive && !dozeModeMonitor.shouldSkipNonEssentialWork()) {
           refreshNow(intentOverride = null, forceSnapshot = false)
         }
       }
@@ -176,6 +231,11 @@ class MainViewModel @Inject constructor(
 
   fun onForegroundStarted() {
     isForegroundActive = true
+    _isUiVisible.value = true
+    thermalMonitor.register(
+      owner = ThermalMonitor.OWNER_FOREGROUND_UI,
+      coolingSensitivity = _uiState.value.prefs.coolingSensitivity,
+    )
     registerBatteryReceiver()
     startAdaptiveForegroundLoop()
     refreshNow(intentOverride = null, forceSnapshot = false)
@@ -183,6 +243,8 @@ class MainViewModel @Inject constructor(
 
   fun onForegroundStopped() {
     isForegroundActive = false
+    _isUiVisible.value = false
+    thermalMonitor.unregister(ThermalMonitor.OWNER_FOREGROUND_UI)
     foregroundLoopJob?.cancel()
     foregroundLoopJob = null
     unregisterBatteryReceiver()
@@ -230,10 +292,11 @@ class MainViewModel @Inject constructor(
         }
       val snapshotsToday = _uiState.value.powerBudget.snapshotsRecordedToday
       val powerBudget = adaptivePowerTierEngine.evaluate(telemetry, wakeupsThisHour, snapshotsToday)
+      val inDoze = dozeModeMonitor.shouldSkipNonEssentialWork()
       val hasUsage = appPowerInspector.hasUsageStatsPermission()
       val topApps =
         withContext(Dispatchers.Default) {
-          if (hasUsage && powerBudget.activeTier != AdaptivePowerTier.SURVIVAL) {
+          if (!inDoze && hasUsage && powerBudget.activeTier != AdaptivePowerTier.SURVIVAL) {
             appPowerInspector.collectTopApps()
           } else {
             emptyList()
@@ -246,6 +309,12 @@ class MainViewModel @Inject constructor(
         forceSnapshot = forceSnapshot,
         dbBatchIntervalSeconds = powerBudget.dbBatchIntervalSeconds,
       )
+      if (!inDoze && telemetry.isCharging) {
+        batteryLifecycleEstimator.evaluateAndLogDailyWhileCharging(
+          intentOverride = intentOverride,
+          nowMillis = telemetry.timestampMillis,
+        )
+      }
       val chargingDiag = chargingClassifier.diagnose(telemetry)
       val heatReport =
         heatingDiagnosisEngine.diagnose(
@@ -258,8 +327,12 @@ class MainViewModel @Inject constructor(
           coolingStepsAppliedHi = eval.coolingStepsAppliedHi,
         )
       val storageInsight =
-        withContext(Dispatchers.IO) {
-          storageInspector.inspect(telemetry.temperatureCelsius, telemetry.levelPercent)
+        if (!inDoze) {
+          withContext(Dispatchers.IO) {
+            storageInspector.inspect(telemetry.temperatureCelsius, telemetry.levelPercent)
+          }
+        } else {
+          _uiState.value.storageInsight
         }
 
       _uiState.update {
@@ -500,10 +573,14 @@ class MainViewModel @Inject constructor(
   }
 
   override fun onCleared() {
+    thermalMonitor.unregister(ThermalMonitor.OWNER_FOREGROUND_UI)
     unregisterBatteryReceiver()
+    voiceAssistant.shutdown()
     super.onCleared()
   }
 
+  private data class Tuple4<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
+  private data class Tuple4<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
   private data class Tuple5<A, B, C, D, E>(val a: A, val b: B, val c: C, val d: D, val e: E)
 
   private fun startOfDayMillis(): Long {

@@ -13,6 +13,8 @@ import com.example.domain.model.LocationSaverMode
 import com.example.domain.model.LogCategory
 import com.example.domain.model.LogSeverity
 import com.example.domain.model.TemperatureZone
+import com.example.service.DozeModeMonitor
+import com.example.service.DozeModeMonitor
 import com.example.service.NotificationHelper
 import com.example.voice.ChargingVoiceAssistant
 import kotlinx.coroutines.sync.Mutex
@@ -38,6 +40,7 @@ class AutomationRulesEngine @Inject constructor(
   private val storageInspector: StorageInspector,
   private val voiceAssistant: ChargingVoiceAssistant,
   private val notificationHelper: NotificationHelper,
+  private val dozeModeMonitor: DozeModeMonitor,
 ) {
   private var lastPluggedState: Boolean? = null
   private var lastAnnouncedChargeLevel: Int = -1
@@ -116,13 +119,18 @@ class AutomationRulesEngine @Inject constructor(
     }
     lastPluggedState = telemetry.isPlugged
 
-    // 2. Charging C5..C100 and Discharging D100..D1 step announcements
+    // 2. Charging C5..C100 (only while charging and screen is on) and Discharging D100..D1 milestones
     val step = prefs.announcementStepPercent.coerceIn(1, 25)
     if (telemetry.isCharging && telemetry.isPlugged) {
       val hitBoundary = telemetry.levelPercent == 100 || (telemetry.levelPercent > 0 && telemetry.levelPercent % step == 0)
-      if (hitBoundary && telemetry.levelPercent != lastAnnouncedChargeLevel) {
+      if (hitBoundary && telemetry.levelPercent != lastAnnouncedChargeLevel && telemetry.screenOn) {
         lastAnnouncedChargeLevel = telemetry.levelPercent
-        voiceAssistant.announceChargingMilestone(telemetry.levelPercent, prefs, telemetry.screenOn)
+        voiceAssistant.announceChargingMilestone(
+          level = telemetry.levelPercent,
+          prefs = prefs,
+          screenOn = telemetry.screenOn,
+          isCharging = true,
+        )
       }
     } else if (!telemetry.isPlugged) {
       val hitBoundary =
@@ -293,21 +301,23 @@ class AutomationRulesEngine @Inject constructor(
     }
     lastScreenOnState = telemetry.screenOn
 
-    // 7. Auto-clean Netra's own cache if > 100 MB (never user files)
-    val ownCacheMb = storageInspector.inspect(telemetry.temperatureCelsius, telemetry.levelPercent).appOwnCacheBytes / (1024 * 1024)
-    if (ownCacheMb > 100L) {
-      val freed = storageInspector.cleanOwnCache()
-      if (freed > 0L) {
-        historyRepository.logActivity(
-          category = LogCategory.STORAGE,
-          severity = LogSeverity.INFO,
-          titleEn = "Auto-Cleaned Netra Cache",
-          titleHi = "नेत्रा ऐप कैश स्वतः साफ़ हुआ",
-          detailEn = "Freed ${StorageInspector.formatBytes(freed)} from Netra's own cache (>100 MB threshold).",
-          detailHi = "नेत्रा के अपने कैश से ${StorageInspector.formatBytes(freed)} खाली किया गया।",
-          whyEn = "Netra only cleans its own temporary cache when it exceeds 100 MB; user files are untouched.",
-          whyHi = "100 MB से अधिक होने पर केवल ऐप का अपना अस्थायी कैश हटाया जाता है।",
-        )
+    // 7. Auto-clean Netra's own cache if > 100 MB (skip during Doze mode)
+    if (!dozeModeMonitor.shouldSkipNonEssentialWork()) {
+      val ownCacheMb = storageInspector.inspect(telemetry.temperatureCelsius, telemetry.levelPercent).appOwnCacheBytes / (1024 * 1024)
+      if (ownCacheMb > 100L) {
+        val freed = storageInspector.cleanOwnCache()
+        if (freed > 0L) {
+          historyRepository.logActivity(
+            category = LogCategory.STORAGE,
+            severity = LogSeverity.INFO,
+            titleEn = "Auto-Cleaned Netra Cache",
+            titleHi = "नेत्रा ऐप कैश स्वतः साफ़ हुआ",
+            detailEn = "Freed ${StorageInspector.formatBytes(freed)} from Netra's own cache (>100 MB threshold).",
+            detailHi = "नेत्रा के अपने कैश से ${StorageInspector.formatBytes(freed)} खाली किया गया।",
+            whyEn = "Netra only cleans its own temporary cache when it exceeds 100 MB; user files are untouched.",
+            whyHi = "100 MB से अधिक होने पर केवल ऐप का अपना अस्थायी कैश हटाया जाता है।",
+          )
+        }
       }
     }
 

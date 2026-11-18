@@ -17,15 +17,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import com.example.domain.model.AdaptivePowerTier
 import com.example.domain.model.GuardianProfile
 import com.example.ui.NetraUiState
 import com.example.ui.components.GuardianCard
+import com.example.ui.components.HourlyTempVoltageChart
 import com.example.ui.components.StatusPill
 import com.example.ui.components.TelemetryLineChart
 import com.example.ui.components.WhyExplainChip
 import com.example.ui.components.zoneColor
 import com.example.ui.i18n.AppStrings
 import com.example.ui.theme.SemanticCoolMint
+import com.example.ui.theme.SemanticIceCyan
 import com.example.ui.theme.SemanticWarmAmber
 import com.example.ui.theme.TelemetryMonoStyle
 
@@ -191,6 +194,60 @@ fun HeatScreen(
             }
           }
         }
+      }
+    }
+
+    // Live ThermalMonitor Receiver & Power Tier Guard Card
+    item {
+      val tm = state.thermalState
+      GuardianCard(modifier = Modifier.widthIn(max = 720.dp)) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text(
+            text = if (strings.isHindi) "थर्मल मॉनिटर (ACTION_BATTERY_CHANGED)" else "Thermal Broadcast Monitor",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.weight(1f),
+          )
+          StatusPill(
+            text = if (tm.isRegistered) "ACTIVE • ${tm.activeTier.name}" else "STANDBY",
+            color = if (tm.isRegistered) SemanticCoolMint else SemanticIceCyan,
+            modifier = Modifier.testTag("heat_thermal_monitor_pill"),
+          )
+        }
+        Text(
+          text = if (strings.isHindi) {
+            "उच्च तापमान अलर्ट (${state.prefs.coolingSensitivity.name}) • पावर टियर: ${tm.activeTier.name} • अलर्ट: ${tm.alertCount}"
+          } else {
+            "Event-driven threshold alerts (${state.prefs.coolingSensitivity.name}) • Power Tier: ${tm.activeTier.name} • Alerts sent: ${tm.alertCount}"
+          },
+          style = TelemetryMonoStyle,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        tm.lastNotificationTitle?.let { lastTitle ->
+          Text(
+            text = "Last warning: $lastTitle",
+            style = MaterialTheme.typography.bodyMedium,
+            color = SemanticWarmAmber,
+          )
+        }
+      }
+    }
+
+    // Hourly Room Temperature & Voltage Canvas Chart
+    item {
+      GuardianCard(modifier = Modifier.widthIn(max = 720.dp)) {
+        Text(
+          text = if (strings.isHindi) "प्रति घंटा तापमान और वोल्टेज इतिहास (Room)" else "Hourly Temperature & Voltage History (Room)",
+          style = MaterialTheme.typography.titleMedium,
+        )
+        HourlyTempVoltageChart(
+          snapshots = state.hourlySnapshots,
+          isHindi = strings.isHindi,
+          isLowPowerSurvival = state.powerBudget.activeTier == AdaptivePowerTier.SURVIVAL,
+        )
       }
     }
 

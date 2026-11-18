@@ -17,6 +17,7 @@ import com.example.data.local.system.AppPowerInspector
 import com.example.data.local.system.BatteryTelemetryCollector
 import com.example.domain.engine.AdaptivePowerTierEngine
 import com.example.domain.engine.AutomationRulesEngine
+import com.example.domain.engine.BatteryLifecycleEstimator
 import com.example.domain.engine.ChargingSpeedClassifier
 import com.example.domain.engine.SelfHealingSupervisor
 import dagger.hilt.android.AndroidEntryPoint
@@ -65,6 +66,13 @@ class BatteryMonitoringService : Service() {
   @Inject lateinit var adaptivePowerTierEngine: AdaptivePowerTierEngine
   @Inject lateinit var selfHealingSupervisor: SelfHealingSupervisor
   @Inject lateinit var preferencesRepository: PreferencesRepository
+  @Inject lateinit var thermalMonitor: ThermalMonitor
+  @Inject lateinit var dozeModeMonitor: DozeModeMonitor
+  @Inject lateinit var batteryLifecycleEstimator: BatteryLifecycleEstimator
+  @Inject lateinit var dozeModeMonitor: DozeModeMonitor
+  @Inject lateinit var batteryLifecycleEstimator: BatteryLifecycleEstimator
+  @Inject lateinit var dozeModeMonitor: DozeModeMonitor
+  @Inject lateinit var batteryLifecycleEstimator: BatteryLifecycleEstimator
 
   private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
   private var receiverRegistered = false
@@ -84,6 +92,10 @@ class BatteryMonitoringService : Service() {
     batteryManager = getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
     _serviceState.update { it.copy(isRunning = true) }
     notificationHelper.createChannels()
+    thermalMonitor.register(ThermalMonitor.OWNER_MONITORING_SERVICE)
+    dozeModeMonitor.register(DozeModeMonitor.OWNER_MONITORING_SERVICE)
+    dozeModeMonitor.register(DozeModeMonitor.OWNER_MONITORING_SERVICE)
+    dozeModeMonitor.register(DozeModeMonitor.OWNER_MONITORING_SERVICE)
     startForegroundCompat(
       title = "Netra Battery Monitor",
       body = "Tracking voltage, temperature, and charging status locally.",
@@ -159,7 +171,13 @@ class BatteryMonitoringService : Service() {
         isAppInForeground = false,
       )
       val tierMetrics = adaptivePowerTierEngine.evaluate(telemetry, wakeupsThisHour = 0, snapshotsToday = 0)
-      val topApps = if (appPowerInspector.hasUsageStatsPermission()) appPowerInspector.collectTopApps(5) else emptyList()
+      val inDoze = dozeModeMonitor.shouldSkipNonEssentialWork()
+      val topApps =
+        if (!inDoze && appPowerInspector.hasUsageStatsPermission()) {
+          appPowerInspector.collectTopApps(5)
+        } else {
+          emptyList()
+        }
       val eval = rulesEngine.evaluate(
         telemetry = telemetry,
         prefs = prefs,
@@ -167,6 +185,12 @@ class BatteryMonitoringService : Service() {
         forceSnapshot = false,
         dbBatchIntervalSeconds = tierMetrics.dbBatchIntervalSeconds,
       )
+      if (!inDoze && telemetry.isCharging) {
+        batteryLifecycleEstimator.evaluateAndLogDailyWhileCharging(
+          intentOverride = intent,
+          nowMillis = telemetry.timestampMillis,
+        )
+      }
       val diag = chargingClassifier.diagnose(telemetry)
 
       val statusCode = intent?.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN)
@@ -273,6 +297,8 @@ class BatteryMonitoringService : Service() {
       runCatching { unregisterReceiver(batteryChangedReceiver) }
       receiverRegistered = false
     }
+    thermalMonitor.unregister(ThermalMonitor.OWNER_MONITORING_SERVICE)
+    dozeModeMonitor.unregister(DozeModeMonitor.OWNER_MONITORING_SERVICE)
     _serviceState.update { it.copy(isRunning = false) }
     serviceScope.cancel()
     super.onDestroy()

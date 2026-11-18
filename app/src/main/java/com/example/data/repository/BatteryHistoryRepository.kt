@@ -2,6 +2,7 @@ package com.example.data.repository
 
 import com.example.data.local.db.ActivityLogEntity
 import com.example.data.local.db.BatteryDao
+import com.example.data.local.db.BatteryHealthLogEntity
 import com.example.data.local.db.BatterySnapshot
 import com.example.data.local.db.ChargingSessionEntity
 import com.example.data.local.db.DischargeSessionEntity
@@ -39,6 +40,8 @@ class BatteryHistoryRepository @Inject constructor(
     dao.observeRecentDischargeSessions()
 
   fun observeActivityLogs(): Flow<List<ActivityLogEntity>> = dao.observeActivityLogs()
+
+  fun observeBatteryHealthLogs(): Flow<List<BatteryHealthLogEntity>> = dao.observeBatteryHealthLogs()
 
   suspend fun recordSnapshot(
     telemetry: BatteryTelemetry,
@@ -213,6 +216,7 @@ class BatteryHistoryRepository @Inject constructor(
     dao.deleteChargingSessionsOlderThan(cutoff)
     dao.deleteDischargeSessionsOlderThan(cutoff)
     dao.deleteLogsOlderThan(cutoff)
+    dao.deleteBatteryHealthLogsOlderThan(cutoff)
   }
 
   suspend fun clearAllLocalData() {
@@ -220,5 +224,6 @@ class BatteryHistoryRepository @Inject constructor(
     dao.clearChargingSessions()
     dao.clearDischargeSessions()
     dao.clearActivityLogs()
+    dao.clearBatteryHealthLogs()
   }
 }

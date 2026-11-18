@@ -75,11 +75,53 @@ object PowerGovernanceRegistry {
       measuredImpact = "<0.05% per hourly idle Room checkpoint",
     ),
     FeaturePowerGate(
+      featureName = "Thermal Threshold Broadcast Monitor (ACTION_BATTERY_CHANGED)",
+      runsInTier = "Tier-0 Urgent >=43C in Critical/Survival; >=40C in Normal/Saver",
+      maxWakeupsPerHour = 0,
+      networkCallsPerHour = 0,
+      measuredImpact = "<0.1% / 24h (event-driven + hysteresis cooldown)",
+    ),
+    FeaturePowerGate(
+      featureName = "Hourly Temp & Voltage Canvas Chart (Room)",
+      runsInTier = "Foreground Visible Only (Stops Flow collection on ON_STOP)",
+      maxWakeupsPerHour = 0,
+      networkCallsPerHour = 0,
+      measuredImpact = "0% background drain when UI is not visible",
+    ),
+    FeaturePowerGate(
+      featureName = "DiskUsageHelper (StorageStatsManager Idle Scan)",
+      runsInTier = "Idle Maintenance Window Only (RequiresDeviceIdle + BatteryNotLow, >=15%, <40C)",
+      maxWakeupsPerHour = 1,
+      networkCallsPerHour = 0,
+      measuredImpact = "~0.08% per 12h idle maintenance cycle",
+    ),
+    FeaturePowerGate(
+      featureName = "Charging TTS Milestone Assistant",
+      runsInTier = "Charging + Screen-On Only (Lazy TTS bind + 20s auto-release)",
+      maxWakeupsPerHour = 0,
+      networkCallsPerHour = 0,
+      measuredImpact = "0% idle memory/battery drain when unplugged or screen off",
+    ),
+    FeaturePowerGate(
       featureName = "Location Power Saver (Trip Mode FGS)",
       runsInTier = "User-initiated Trip only (Normal/Saver; GPS off in Survival)",
       maxWakeupsPerHour = 4,
       networkCallsPerHour = 0,
       measuredImpact = "User-controlled foreground notification",
+    ),
+    FeaturePowerGate(
+      featureName = "Daily Battery Cycle & Capacity Degradation Estimator (WorkManager)",
+      runsInTier = "Charging Only (Once per day; RequiresCharging + BatteryNotLow)",
+      maxWakeupsPerHour = 0,
+      networkCallsPerHour = 0,
+      measuredImpact = "<0.02% / day while plugged in",
+    ),
+    FeaturePowerGate(
+      featureName = "Doze Mode Broadcast Guard (ACTION_DEVICE_IDLE_MODE_CHANGED)",
+      runsInTier = "Tier-0 Event-Driven (Zero polling; pauses all non-essential work in Doze)",
+      maxWakeupsPerHour = 0,
+      networkCallsPerHour = 0,
+      measuredImpact = "Saves ~0.5–1.5% / 24h by skipping non-essential tasks in Doze",
     ),
   )
 }

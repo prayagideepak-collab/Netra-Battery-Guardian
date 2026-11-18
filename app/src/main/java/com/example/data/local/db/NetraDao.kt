@@ -63,6 +63,36 @@ interface NetraDao {
   @Query("SELECT * FROM discharge_sessions ORDER BY startTimeMillis DESC LIMIT 100")
   suspend fun getAllDischargeSessionsForExport(): List<DischargeSessionEntity>
 
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertBatteryHealthLog(entry: BatteryHealthLogEntity): Long
+
+  @Query("SELECT * FROM battery_health_logs WHERE dayBucket = :dayBucket LIMIT 1")
+  suspend fun getBatteryHealthLogForDay(dayBucket: Long): BatteryHealthLogEntity?
+
+  @Query("SELECT * FROM battery_health_logs ORDER BY timestampMillis DESC LIMIT 60")
+  fun observeBatteryHealthLogs(): Flow<List<BatteryHealthLogEntity>>
+
+  @Query("DELETE FROM battery_health_logs WHERE timestampMillis < :cutoffMillis")
+  suspend fun deleteBatteryHealthLogsOlderThan(cutoffMillis: Long)
+
+  @Query("DELETE FROM battery_health_logs")
+  suspend fun clearBatteryHealthLogs()
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertBatteryHealthLog(entry: BatteryHealthLogEntity): Long
+
+  @Query("SELECT * FROM battery_health_logs WHERE dayBucket = :dayBucket LIMIT 1")
+  suspend fun getBatteryHealthLogForDay(dayBucket: Long): BatteryHealthLogEntity?
+
+  @Query("SELECT * FROM battery_health_logs ORDER BY timestampMillis DESC LIMIT 60")
+  fun observeBatteryHealthLogs(): Flow<List<BatteryHealthLogEntity>>
+
+  @Query("DELETE FROM battery_health_logs WHERE timestampMillis < :cutoffMillis")
+  suspend fun deleteBatteryHealthLogsOlderThan(cutoffMillis: Long)
+
+  @Query("DELETE FROM battery_health_logs")
+  suspend fun clearBatteryHealthLogs()
+
   @Query("DELETE FROM battery_snapshots WHERE timestampMillis < :cutoffMillis")
   suspend fun deleteSnapshotsOlderThan(cutoffMillis: Long)
 
