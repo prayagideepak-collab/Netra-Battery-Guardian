@@ -321,6 +321,7 @@ class MainViewModel @Inject constructor(
         )
       }
       val chargingDiag = chargingClassifier.diagnose(telemetry)
+      com.example.widget.GuardianBatteryWidget.publish(app, telemetry, chargingDiag)
       val heatReport =
         heatingDiagnosisEngine.diagnose(
           telemetry = telemetry,
@@ -579,6 +580,7 @@ class MainViewModel @Inject constructor(
   fun clearAllLocalData() {
     viewModelScope.launch {
       telemetryCollector.setCoolingBrightnessAllowed(false)
+      com.example.widget.GuardianBatteryWidget.clear(app)
       historyRepository.clearAllLocalData()
       preferencesRepository.resetAllPreferences()
       _uiState.update { it.copy(statusMessage = "All local Netra data cleared.") }

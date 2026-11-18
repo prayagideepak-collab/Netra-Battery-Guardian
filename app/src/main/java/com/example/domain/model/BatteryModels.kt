@@ -175,6 +175,7 @@ data class SelfHealingStatus(
 data class BatteryTelemetry(
   val timestampMillis: Long = System.currentTimeMillis(),
   val levelPercent: Int = -1,
+  val batteryStatus: Int = 1, // Android BATTERY_STATUS_UNKNOWN
   val isCharging: Boolean = false,
   val isPlugged: Boolean = false,
   val plugType: PlugType = PlugType.NONE,

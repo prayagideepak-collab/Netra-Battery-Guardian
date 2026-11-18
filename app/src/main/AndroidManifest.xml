@@ -51,6 +51,11 @@
             </intent-filter>
         </activity>
 
+        <receiver android:name=".widget.GuardianBatteryWidget" android:exported="false" android:label="Guardian battery widget">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/guardian_battery_widget_info" />
+        </receiver>
+
         <!-- Foreground service tracking battery state via BatteryManager & ACTION_BATTERY_CHANGED -->
         <service
             android:name=".service.BatteryMonitoringService"
