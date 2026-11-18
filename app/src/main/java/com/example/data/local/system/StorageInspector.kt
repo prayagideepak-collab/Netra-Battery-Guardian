@@ -192,10 +192,12 @@ class StorageInspector @Inject constructor(
     val pm = context.packageManager
     for (pkg in candidates) {
       val exists = runCatching {
-        pm.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(0))
-      }.recoverCatching {
-        @Suppress("DEPRECATION")
-        pm.getPackageInfo(pkg, 0)
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+          pm.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(0))
+        } else {
+          @Suppress("DEPRECATION")
+          pm.getPackageInfo(pkg, 0)
+        }
       }.isSuccess
       if (exists) return pkg
     }

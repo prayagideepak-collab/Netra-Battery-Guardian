@@ -12,7 +12,7 @@ app = m.find('application')
 assert app.get(a + 'allowBackup') == 'false'
 assert app.get(a + 'usesCleartextTraffic') == 'false'
 assert json.loads((root / 'metadata.json').read_text())['majorCapabilities'] == []
-for filename, paths in [('backup_rules.xml', ['.']), ('data_extraction_rules.xml', ['cloud-backup', 'device-transfer'])]:
+for filename, paths in [('backup_rules.xml', ['.']), ('data_extraction_rules.xml', ['cloud-backup', 'device-transfer', 'cross-platform-transfer'])]:
     tree = ET.parse(root / 'app/src/main/res/xml' / filename).getroot()
     for path in paths:
         element = tree if path == '.' else tree.find(path)
