@@ -233,16 +233,7 @@ fun SettingsScreen(
           onValueChange = { onSetBatterySaverThreshold(it.toInt()) },
           valueRange = 10f..35f,
         )
-        Text(if (strings.isHindi) "कूलिंग संवेदनशीलता" else "Cooling Mode Sensitivity")
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          CoolingSensitivity.entries.forEach { sens ->
-            FilterChip(
-              selected = p.coolingSensitivity == sens,
-              onClick = { onSetCoolingSensitivity(sens) },
-              label = { Text(sens.name.lowercase().replaceFirstChar { it.uppercase() }) },
-            )
-          }
-        }
+        Text(if (strings.isHindi) "थर्मल चेतावनियाँ Android की स्थिति पर आधारित हैं।" else "Thermal alerts follow Android's reported state, not a guessed temperature limit.")
         Text("Local Data Retention: ${p.dataRetentionDays} days")
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
           listOf(7, 30, 90).forEach { days ->

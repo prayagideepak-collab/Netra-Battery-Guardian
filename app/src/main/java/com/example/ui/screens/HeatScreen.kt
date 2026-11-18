@@ -171,13 +171,10 @@ fun HeatScreen(
             verticalAlignment = Alignment.CenterVertically,
           ) {
             Text(
-              text = if (strings.isHindi) "संभावित गर्मी के कारण" else "Heat Diagnosis",
+              text = if (strings.isHindi) "संभावित गर्मी के कारण" else "Possible Heat Factors",
               style = MaterialTheme.typography.titleMedium,
             )
-            StatusPill(
-              text = "Confidence: ${report.confidence.name}",
-              color = SemanticWarmAmber,
-            )
+
           }
 
           if (report.causes.isEmpty()) {
