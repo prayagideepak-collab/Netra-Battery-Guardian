@@ -188,6 +188,7 @@ class BatteryMonitoringService : Service() {
         )
       }
       val diag = chargingClassifier.diagnose(telemetry)
+      com.example.widget.GuardianBatteryWidget.publish(this@BatteryMonitoringService, telemetry, diag)
 
       val statusCode = intent?.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN)
         ?: BatteryManager.BATTERY_STATUS_UNKNOWN
