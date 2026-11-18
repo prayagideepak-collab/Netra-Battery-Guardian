@@ -580,7 +580,6 @@ class MainViewModel @Inject constructor(
   }
 
   private data class Tuple4<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
-  private data class Tuple4<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
   private data class Tuple5<A, B, C, D, E>(val a: A, val b: B, val c: C, val d: D, val e: E)
 
   private fun startOfDayMillis(): Long {
