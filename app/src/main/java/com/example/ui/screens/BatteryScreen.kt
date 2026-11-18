@@ -131,7 +131,7 @@ fun BatteryScreen(
             style = MaterialTheme.typography.bodyLarge,
           )
           Text(
-            text = "Plug: ${t.plugType.name} • Rolling Current: ${telemetryText(diag.rollingAvgCurrentMa, " mA", 0)} • Est. Capacity: ${capacityText(t.estimatedCapacityMah)}" +
+            text = listOfNotNull(t.plugType.name.takeIf { t.isPlugged }, telemetryText(diag.rollingAvgCurrentMa, " mA", 0).takeIf { it.isNotBlank() }, capacityText(t.estimatedCapacityMah).takeIf { it.isNotBlank() }).joinToString(" • ") +
               (t.chargeCycleCount?.let { " • Cycles: $it" } ?: ""),
             style = TelemetryMonoStyle,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -210,11 +210,8 @@ fun BatteryScreen(
     item {
       val latestHealth = state.batteryHealthLogs.firstOrNull { it.sourceLabel.startsWith("OBSERVED_V2") }
       val cycles = t.chargeCycleCount?.toFloat() ?: latestHealth?.estimatedCycleCount ?: -1f
-      val cyclesText = if (cycles >= 0) cycles.toInt().toString() else "Unavailable"
+      val cyclesText = if (cycles >= 0) cycles.toInt().toString() else ""
       val estMah = t.estimatedCapacityMah
-      val designText = "Unavailable"
-      val degText = "Unavailable"
-      val healthText = "Unavailable"
 
       GuardianCard(modifier = Modifier.widthIn(max = 720.dp).testTag("battery_cycle_health_card")) {
         Row(
@@ -223,17 +220,13 @@ fun BatteryScreen(
           verticalAlignment = Alignment.CenterVertically,
         ) {
           Text(
-            text = if (strings.isHindi) "बैटरी चक्र और क्षमता क्षरण" else "Battery Cycles & Degradation",
+            text = if (strings.isHindi) "Android बैटरी माप" else "Android Battery Observations",
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.weight(1f),
           )
-          StatusPill(
-            text = "$healthText Health",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
         }
         Text(
-          text = "OS Cycles: $cyclesText • Capacity: ${capacityText(estMah)} • Design: $designText • Wear: $degText",
+          text = listOfNotNull(cyclesText.takeIf { it.isNotBlank() }?.let { "OS Cycles: $it" }, capacityText(estMah).takeIf { it.isNotBlank() }).joinToString(" • "),
           style = TelemetryMonoStyle,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -288,10 +281,7 @@ fun BatteryScreen(
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.weight(1f),
           )
-          StatusPill(
-            text = "Score ${opt.healthScore}/100 • ${opt.powerTier.name}",
-            color = if (opt.healthScore >= 80) SemanticCoolMint else SemanticWarmAmber,
-          )
+
         }
         opt.recommendations.forEach { rec ->
           Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

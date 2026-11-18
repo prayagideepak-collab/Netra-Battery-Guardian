@@ -45,7 +45,7 @@ data class OptimizationRecommendation(
 
 data class BatteryOptimizationReport(
   val recommendations: List<OptimizationRecommendation> = emptyList(),
-  val healthScore: Int = 100,
+  val healthScore: Int = -1,
   val powerTier: AdaptivePowerTier = AdaptivePowerTier.NORMAL,
   val throttledDueToLowPower: Boolean = false,
   val evaluatedAtMillis: Long = 0L,
@@ -76,21 +76,20 @@ class BatteryHealthOptimizer @Inject constructor() {
         powerBudget.activeTier == AdaptivePowerTier.SURVIVAL
 
     val items = mutableListOf<OptimizationRecommendation>()
-    var score = 100
 
     // 1. High battery temperature advice (Tier-0 safety relevant)
-    if (telemetry.temperatureCelsius >= 38.5f) {
-      score -= if (telemetry.temperatureCelsius >= 43f) 25 else 14
-      val tempStr = String.format(Locale.US, "%.1f", telemetry.temperatureCelsius)
+    if (telemetry.healthState == com.example.domain.model.BatteryHealthState.OVERHEAT || telemetry.thermalLevel in setOf(com.example.domain.model.ThermalLevel.SEVERE, com.example.domain.model.ThermalLevel.CRITICAL, com.example.domain.model.ThermalLevel.EMERGENCY, com.example.domain.model.ThermalLevel.SHUTDOWN)) {
+
+      val tempStr = com.example.domain.model.telemetryText(telemetry.temperatureCelsius, "°C")
       items += OptimizationRecommendation(
         id = "opt_thermal_cooling",
-        priority = if (telemetry.temperatureCelsius >= 43f) OptimizationPriority.URGENT else OptimizationPriority.HIGH,
-        titleEn = "Reduce Device Temperature ($tempStr°C)",
-        titleHi = "फ़ोन का तापमान कम करें ($tempStr°C)",
-        adviceEn = "Battery is warm while ${if (telemetry.isCharging) "charging" else "active"}. Enable Cooling Mode and avoid heavy apps until temperature drops below 36°C.",
-        adviceHi = "बैटरी गर्म है। कूलिंग मोड चालू करें और 36°C से नीचे आने तक भारी ऐप्स बंद रखें।",
-        whyEn = "Sustained heat above 38.5°C accelerates lithium-ion capacity degradation.",
-        whyHi = "38.5°C से ऊपर लगातार गर्मी बैटरी की क्षमता को तेज़ी से कम करती है।",
+        priority = OptimizationPriority.URGENT,
+        titleEn = "Reduce Device Temperature ($tempStr)",
+        titleHi = "फ़ोन का तापमान कम करें ($tempStr)",
+        adviceEn = "Battery is warm while ${if (telemetry.isCharging) "charging" else "active"}. Review Android thermal warnings and avoid heavy apps until the OS warning clears.",
+        adviceHi = "बैटरी गर्म है। कूलिंग मोड चालू करें और OS चेतावनी समाप्त होने तक भारी ऐप्स बंद रखें।",
+        whyEn = "Android reported thermal stress or battery overheat. This is not a measured OEM safe-temperature threshold.",
+        whyHi = "Android ने थर्मल दबाव या बैटरी ओवरहीट की सूचना दी है।",
         actionLabelEn = "Activate Cooling Mode",
         actionLabelHi = "कूलिंग मोड चालू करें",
         actionTarget = OptimizerActionTarget.THERMAL_COOLING_MODE,
@@ -104,13 +103,13 @@ class BatteryHealthOptimizer @Inject constructor() {
         it.estimatedDrainSharePercent >= 20f || it.foregroundMinutesToday >= 30 || !it.isBatteryOptimized
       }
       if (heavyApp != null) {
-        score -= 15
+
         items += OptimizationRecommendation(
           id = "opt_heavy_app_${heavyApp.packageName}",
           priority = OptimizationPriority.HIGH,
           titleEn = "Close or Restrict ${heavyApp.appName}",
           titleHi = "${heavyApp.appName} को बंद या सीमित करें",
-          adviceEn = "${heavyApp.appName} used ${heavyApp.foregroundMinutesToday}m today (~${heavyApp.estimatedDrainSharePercent.toInt()}% share). Open App Info to close it or set Battery usage to Restricted.",
+          adviceEn = "${heavyApp.appName} used ${heavyApp.foregroundMinutesToday}m today (foreground-use share ~${heavyApp.estimatedDrainSharePercent.toInt()}%, not measured battery drain). Open App Info to close it or set Battery usage to Restricted.",
           adviceHi = "${heavyApp.appName} ने आज ${heavyApp.foregroundMinutesToday} मिनट उपयोग किया (~${heavyApp.estimatedDrainSharePercent.toInt()}%)। ऐप जानकारी में इसे सीमित करें।",
           whyEn = "Manually closing or restricting high-consumption apps in Android settings cuts background wake-ups safely without root or fake task killers.",
           whyHi = "Android सेटिंग से भारी ऐप्स को सीमित करना सुरक्षित रूप से बैटरी बचाता है।",
@@ -124,11 +123,11 @@ class BatteryHealthOptimizer @Inject constructor() {
       // Doze mode & Battery Optimization posture check
       val hasAbnormalDrain = recentDischarges.any { it.abnormalDrainDetected }
       val hasUnrestrictedApps = topApps.any { !it.isBatteryOptimized }
-      if ((!telemetry.osBatterySaverOn && !telemetry.isCharging && telemetry.levelPercent <= 50) ||
+      if ((!telemetry.osBatterySaverOn && !telemetry.isCharging && telemetry.hasLevel && telemetry.levelPercent <= 50) ||
         hasAbnormalDrain ||
         hasUnrestrictedApps
       ) {
-        score -= 12
+
         items += OptimizationRecommendation(
           id = "opt_doze_settings",
           priority = if (hasAbnormalDrain) OptimizationPriority.HIGH else OptimizationPriority.MODERATE,
@@ -155,7 +154,7 @@ class BatteryHealthOptimizer @Inject constructor() {
       // Location / poor cellular / hotspot drain check
       val locationHeavyApp = topApps.firstOrNull { it.hasLocationPermission && it.foregroundMinutesToday >= 15 }
       if (telemetry.hotspotLikelyActive || telemetry.poorCellularSignal || locationHeavyApp != null) {
-        score -= 8
+
         items += OptimizationRecommendation(
           id = "opt_radio_location",
           priority = OptimizationPriority.MODERATE,
@@ -167,7 +166,7 @@ class BatteryHealthOptimizer @Inject constructor() {
             telemetry.poorCellularSignal ->
               "Weak cellular signal detected; modem boost drains battery rapidly. Enable Data Saver or use Wi-Fi."
             else ->
-              "${locationHeavyApp?.appName ?: "An app"} uses background location. Switch Location access to 'While using app'."
+              "${locationHeavyApp?.appName ?: "An app"} has location permission and recent foreground use. Background-location use is not verified; review its permission if needed."
           },
           adviceHi = "हॉटस्पॉट, कमज़ोर सिग्नल या बैकग्राउंड लोकेशन से बैटरी खपत बढ़ रही है; डेटा सेवर या लोकेशन सेटिंग सुधारें।",
           whyEn = "Cellular transmission and high-accuracy GPS polling are major off-screen power consumers.",
@@ -182,26 +181,9 @@ class BatteryHealthOptimizer @Inject constructor() {
         )
       }
 
-      // Long-term capacity wear check
-      if (latestHealthLog != null && latestHealthLog.degradationPercent >= 15f) {
-        score -= 10
-        val degStr = String.format(Locale.US, "%.1f", latestHealthLog.degradationPercent)
-        items += OptimizationRecommendation(
-          id = "opt_cycle_wear",
-          priority = OptimizationPriority.MODERATE,
-          titleEn = "Preserve Remaining Capacity ($degStr% Wear)",
-          titleHi = "बची हुई बैटरी क्षमता सुरक्षित रखें ($degStr% क्षरण)",
-          adviceEn = "Estimated wear is $degStr% over ${String.format(Locale.US, "%.1f", latestHealthLog.estimatedCycleCount)} cycles. Avoid keeping the phone at 100% on warm chargers overnight.",
-          adviceHi = "अनुमानित क्षरण $degStr% है। रात भर 100% पर गर्म चार्जर से जुड़े रहने से बचें।",
-          whyEn = "High voltage + high temperature (>38°C) accelerates long-term electrode aging.",
-          whyHi = "उच्च वोल्टेज और गर्मी एक साथ बैटरी की उम्र तेज़ी से कम करते हैं।",
-          actionLabelEn = "Battery Saver Settings",
-          actionLabelHi = "बैटरी सेवर सेटिंग्स",
-          actionTarget = OptimizerActionTarget.BATTERY_SAVER_SETTINGS,
-        )
-      }
-    } else if (!telemetry.isCharging && telemetry.levelPercent < 15) {
-      score -= 15
+
+    } else if (!telemetry.isCharging && telemetry.hasLevel && telemetry.levelPercent < 15) {
+
       items += OptimizationRecommendation(
         id = "opt_low_power_tier",
         priority = OptimizationPriority.URGENT,
@@ -221,17 +203,17 @@ class BatteryHealthOptimizer @Inject constructor() {
       items += OptimizationRecommendation(
         id = "opt_all_good",
         priority = OptimizationPriority.GOOD,
-        titleEn = if (dozeState.isInDozeMode) "Doze Mode Power Savings Active" else "Battery & Thermal Posture Healthy",
-        titleHi = if (dozeState.isInDozeMode) "डोज़ मोड पावर बचत सक्रिय" else "बैटरी और तापमान स्थिति स्वस्थ है",
+        titleEn = if (dozeState.isInDozeMode) "Doze Mode Power Savings Active" else "Available Observations Reviewed",
+        titleHi = if (dozeState.isInDozeMode) "डोज़ मोड पावर बचत सक्रिय" else "उपलब्ध माप की समीक्षा की गई",
         adviceEn = if (dozeState.isInDozeMode) {
           "Device is in Doze mode; Netra has paused all non-essential background tasks automatically."
         } else {
-          "No high-drain apps, thermal spikes, or abnormal idle drain detected right now."
+          "No additional advice from the available observations. Battery health and unobserved app activity remain Unavailable."
         },
         adviceHi = if (dozeState.isInDozeMode) {
           "डिवाइस डोज़ मोड में है; सभी गैर-जरूरी बैकग्राउंड कार्य रुके हुए हैं।"
         } else {
-          "अभी कोई भारी ऐप ड्रेन, अधिक गर्मी या असामान्य खपत नहीं मिली।"
+          "उपलब्ध डेटा की समीक्षा की गई। बैटरी स्वास्थ्य और अनदेखी गतिविधि अनुपलब्ध हैं।"
         },
         whyEn = "Adaptive power tiers keep monitoring lightweight and only surface actions when needed.",
         whyHi = "अनुकूली पावर टियर केवल आवश्यकता होने पर ही सुझाव दिखाते हैं।",
@@ -243,7 +225,7 @@ class BatteryHealthOptimizer @Inject constructor() {
 
     return BatteryOptimizationReport(
       recommendations = items,
-      healthScore = score.coerceIn(10, 100),
+      healthScore = -1,
       powerTier = powerBudget.activeTier,
       throttledDueToLowPower = isLowPowerThrottled,
       evaluatedAtMillis = nowMillis,

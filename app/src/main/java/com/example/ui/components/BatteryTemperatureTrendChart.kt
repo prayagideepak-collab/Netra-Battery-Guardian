@@ -152,14 +152,7 @@ fun BatteryTemperatureTrendChart(
 
     val minAxis = remember(minVal) { minOf(18f, minVal - 3f) }
     val maxAxis = remember(maxVal) { maxOf(48f, maxVal + 3f) }
-    val lineColor = when {
-      maxVal >= 45f -> SemanticCriticalRed
-      maxVal >= 40f -> SemanticHotOrange
-      maxVal >= 36f -> SemanticWarmAmber
-      else -> SemanticCoolMint
-    }
-    val warn40Color = SemanticCriticalRed.copy(alpha = 0.55f)
-    val warm36Color = SemanticWarmAmber.copy(alpha = 0.4f)
+    val lineColor = SemanticCoolMint
     val gridColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)
 
     // Trend metrics pills
@@ -234,28 +227,6 @@ fun BatteryTemperatureTrendChart(
           )
         }
 
-        // Reference thermal threshold lines: 36°C (Warm) and 40°C (Hot)
-        if (36f in minAxis..maxAxis) {
-          val y36 = size.height - (((36f - minAxis) / span).coerceIn(0f, 1f) * size.height)
-          drawLine(
-            color = warm36Color,
-            start = Offset(0f, y36),
-            end = Offset(size.width, y36),
-            strokeWidth = 1.dp.toPx(),
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f), 0f),
-          )
-        }
-        if (40f in minAxis..maxAxis) {
-          val y40 = size.height - (((40f - minAxis) / span).coerceIn(0f, 1f) * size.height)
-          drawLine(
-            color = warn40Color,
-            start = Offset(0f, y40),
-            end = Offset(size.width, y40),
-            strokeWidth = 1.3.dp.toPx(),
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 6f), 0f),
-          )
-        }
-
         val linePath = Path()
         val fillPath = Path()
         val points = ArrayList<Pair<Offset, BatterySnapshot>>(activeSnapshots.size)
@@ -299,13 +270,7 @@ fun BatteryTemperatureTrendChart(
 
         val dotRadius = if (points.size <= 32) 3.5.dp.toPx() else 2.2.dp.toPx()
         points.forEach { (pt, snap) ->
-          val ptColor = when {
-            snap.temperatureCelsius >= 43f -> SemanticCriticalRed
-            snap.temperatureCelsius >= 40f -> SemanticHotOrange
-            snap.temperatureCelsius >= 36f -> SemanticWarmAmber
-            snap.isCharging -> SemanticIceCyan
-            else -> SemanticCoolMint
-          }
+          val ptColor = if (snap.isCharging) SemanticIceCyan else SemanticCoolMint
           drawCircle(color = ptColor, radius = dotRadius, center = pt)
         }
       }

@@ -80,17 +80,17 @@ fun HeatScreen(
               color = zColor,
             )
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-              StatusPill(strings.zoneLabel(report.zone), zColor)
+              if (report.zone != com.example.domain.model.TemperatureZone.UNAVAILABLE) StatusPill(strings.zoneLabel(report.zone), zColor)
               StatusPill("OS: ${strings.thermalLabel(t.thermalLevel)}", MaterialTheme.colorScheme.secondary)
             }
           }
 
           Text(
-            text = if (strings.isHindi) report.trend.messageHi else report.trend.messageEn,
+            text = if (!report.trend.deltaPerMinute.isFinite()) "" else if (strings.isHindi) report.trend.messageHi else report.trend.messageEn,
             style = MaterialTheme.typography.titleMedium,
           )
           Text(
-            text = "5-min Trend: ${telemetryText(report.trend.deltaPerMinute, " °C/min", 2)}",
+            text = if (report.trend.deltaPerMinute.isFinite()) "Observed Trend: ${telemetryText(report.trend.deltaPerMinute, " °C/min", 2)}" else "",
             style = TelemetryMonoStyle,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
@@ -171,13 +171,10 @@ fun HeatScreen(
             verticalAlignment = Alignment.CenterVertically,
           ) {
             Text(
-              text = if (strings.isHindi) "संभावित गर्मी के कारण" else "Heat Diagnosis",
+              text = if (strings.isHindi) "संभावित गर्मी के कारण" else "Possible Heat Factors",
               style = MaterialTheme.typography.titleMedium,
             )
-            StatusPill(
-              text = "Confidence: ${report.confidence.name}",
-              color = SemanticWarmAmber,
-            )
+
           }
 
           if (report.causes.isEmpty()) {

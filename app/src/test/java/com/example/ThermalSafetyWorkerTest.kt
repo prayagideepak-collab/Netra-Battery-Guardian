@@ -129,7 +129,7 @@ class ThermalSafetyWorkerTest {
       putExtra(BatteryManager.EXTRA_SCALE, 100)
       putExtra(BatteryManager.EXTRA_TEMPERATURE, 475) // 47.5°C CRITICAL
       putExtra(BatteryManager.EXTRA_VOLTAGE, 4210)
-      putExtra(BatteryManager.EXTRA_HEALTH, BatteryManager.BATTERY_HEALTH_GOOD)
+      putExtra(BatteryManager.EXTRA_HEALTH, BatteryManager.BATTERY_HEALTH_OVERHEAT)
       putExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_CHARGING)
       putExtra(BatteryManager.EXTRA_PLUGGED, BatteryManager.BATTERY_PLUGGED_AC)
     }

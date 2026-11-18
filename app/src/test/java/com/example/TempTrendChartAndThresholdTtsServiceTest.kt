@@ -127,7 +127,7 @@ class TempTrendChartAndThresholdTtsServiceTest {
     assertEquals(80, voiceAssistant.assistantState.value.lastMilestoneLevel)
     assertEquals("Reached 80 percent charge.", voiceAssistant.assistantState.value.lastSpokenMessage)
 
-    // 2. Dropped to 20% low battery while discharging -> speaks low-battery alert
+    // 2. At screen-off20%, preserve established quiet policy; no extra speech.
     BatteryThresholdTtsService.triggerSafely(
       context = context,
       voiceAssistant = voiceAssistant,
@@ -137,9 +137,8 @@ class TempTrendChartAndThresholdTtsServiceTest {
       screenOn = false,
       allowServiceStart = false,
     )
-    assertEquals(2, voiceAssistant.assistantState.value.announcementCount)
-    assertEquals(20, voiceAssistant.assistantState.value.lastMilestoneLevel)
-    assertTrue(voiceAssistant.assistantState.value.lastSpokenMessage?.contains("20 percent") == true)
+    assertEquals(1, voiceAssistant.assistantState.value.announcementCount)
+    assertEquals(80, voiceAssistant.assistantState.value.lastMilestoneLevel)
 
     // 3. Dropped to 5% critically low battery -> speaks critical low-battery alert
     BatteryThresholdTtsService.triggerSafely(
@@ -151,7 +150,7 @@ class TempTrendChartAndThresholdTtsServiceTest {
       screenOn = false,
       allowServiceStart = false,
     )
-    assertEquals(3, voiceAssistant.assistantState.value.announcementCount)
+    assertEquals(2, voiceAssistant.assistantState.value.announcementCount)
     assertEquals(5, voiceAssistant.assistantState.value.lastMilestoneLevel)
     assertTrue(voiceAssistant.assistantState.value.lastSpokenMessage?.contains("critically low") == true)
 

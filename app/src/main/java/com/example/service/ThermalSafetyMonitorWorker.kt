@@ -30,7 +30,7 @@ import java.util.Locale
  *
  * Designed for ultra-low power:
  * - Zero polling loops or wake locks; relies on OS-scheduled WorkManager intervals.
- * - Performs ZERO Room database writes during safe temperatures (< 45.0°C and non-CRITICAL),
+ * - Performs ZERO Room database writes when Android reports no overheat or critical thermal state,
  *   persisting snapshots and critical logs exclusively when a genuine critical thermal condition
  *   or [BatteryManager.BATTERY_HEALTH_OVERHEAT] state occurs (Tier-0 device safety).
  */
@@ -48,7 +48,6 @@ class ThermalSafetyMonitorWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, params) {
 
   companion object {
-    const val CRITICAL_TEMPERATURE_CELSIUS = 45.0f
     const val CRITICAL_TITLE_EN = "Critical Thermal Event Detected"
   }
 
@@ -85,16 +84,14 @@ class ThermalSafetyMonitorWorker @AssistedInject constructor(
       if (tempTenths != null && tempTenths != Int.MIN_VALUE) tempTenths / 10f
       else telemetry.temperatureCelsius
 
-    val zone = temperatureEngine.classifyZone(tempC, prefs.coolingSensitivity)
+    val zone = temperatureEngine.classifyObserved(telemetry)
     val isOverheatHealth =
       rawHealth == BatteryManager.BATTERY_HEALTH_OVERHEAT ||
         telemetry.healthState == BatteryHealthState.OVERHEAT
     val isOsCriticalThermal =
-      telemetry.thermalLevel.ordinal >= ThermalLevel.CRITICAL.ordinal
+      telemetry.thermalLevel in setOf(ThermalLevel.CRITICAL, ThermalLevel.EMERGENCY, ThermalLevel.SHUTDOWN)
     val isCriticalTemp =
-      tempC >= CRITICAL_TEMPERATURE_CELSIUS ||
-        zone.ordinal >= TemperatureZone.CRITICAL.ordinal ||
-        isOverheatHealth ||
+      isOverheatHealth ||
         isOsCriticalThermal
 
     if (!isCriticalTemp) {
@@ -106,8 +103,8 @@ class ThermalSafetyMonitorWorker @AssistedInject constructor(
     }
 
     val nowMillis = System.currentTimeMillis()
-    val tempStr = String.format(Locale.US, "%.1f", tempC)
-    val voltageVolts = String.format(Locale.US, "%.2f", telemetry.voltageMv / 1000f)
+    val tempStr = com.example.domain.model.telemetryText(tempC, "°C")
+    val voltageVolts = com.example.domain.model.telemetryText(telemetry.voltageVolts, " V", 2)
 
     // Persist snapshot and critical thermal event log atomically to Room
     appDatabase.batteryDao().insertSnapshot(
@@ -130,12 +127,12 @@ class ThermalSafetyMonitorWorker @AssistedInject constructor(
     )
 
     val detailEn = buildString {
-      append("$tempStr°C (${zone.name}) at $bmLevel%, $voltageVolts V")
+      append("$tempStr (${zone.name}) at ${com.example.domain.model.batteryLevelText(bmLevel)}, $voltageVolts")
       if (isOverheatHealth) append(" • OS BATTERY_HEALTH_OVERHEAT")
       if (isChargingNow) append(" • Charger plugged (unplug to cool)")
     }
     val detailHi =
-      "$tempStr°C (${zone.name}) • स्तर: $bmLevel%, वोल्टेज: $voltageVolts V।" +
+      "$tempStr (${zone.name}) • स्तर: ${com.example.domain.model.batteryLevelText(bmLevel)}, वोल्टेज: $voltageVolts।" +
         if (isChargingNow) " ठंडा करने के लिए चार्जर हटाएँ।" else " भारी उपयोग रोकें।"
 
     appDatabase.netraDao().insertActivityLog(
@@ -143,8 +140,8 @@ class ThermalSafetyMonitorWorker @AssistedInject constructor(
         timestampMillis = nowMillis,
         category = LogCategory.HEAT.name,
         severity = LogSeverity.CRITICAL.name,
-        titleEn = "$CRITICAL_TITLE_EN ($tempStr°C)",
-        titleHi = "गंभीर बैटरी तापमान चेतावनी ($tempStr°C)",
+        titleEn = "$CRITICAL_TITLE_EN ($tempStr)",
+        titleHi = "गंभीर बैटरी तापमान चेतावनी ($tempStr)",
         detailEn = detailEn,
         detailHi = detailHi,
         whyEn = "Background WorkManager thermal guard detected dangerous battery heat via BatteryManager and logged it offline.",
@@ -155,11 +152,11 @@ class ThermalSafetyMonitorWorker @AssistedInject constructor(
     logWriter.append("THERMAL_WORKER", "CRITICAL thermal event logged: $detailEn")
     notificationHelper.postCriticalAlert(
       id = NotificationHelper.ID_THERMAL_ALERT,
-      title = "Critical Battery Heat ($tempStr°C)",
+      title = "Critical Battery Heat ($tempStr)",
       body = if (isChargingNow) {
-        "Background monitor detected $tempStr°C while charging. Unplug charger to prevent battery wear."
+        "Background monitor detected $tempStr while charging. Unplug charger to prevent battery wear."
       } else {
-        "Background monitor detected $tempStr°C. Pause heavy tasks and let device cool."
+        "Background monitor detected $tempStr. Pause heavy tasks and let device cool."
       },
     )
 

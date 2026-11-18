@@ -83,7 +83,7 @@ data class NetraUiState(
   val activeProfile: GuardianProfile = GuardianProfile.NORMAL,
   val powerBudget: PowerBudgetMetrics =
     PowerBudgetMetrics(AdaptivePowerTier.NORMAL, 0, 0, 0, 15, false),
-  val storageInsight: StorageInsight = StorageInsight(1L, 0L, 1L, 50f, 0L, 0L),
+  val storageInsight: StorageInsight = StorageInsight(0L, 0L, 0L, 0f, 0L, 0L),
   val topApps: List<AppPowerInsight> = emptyList(),
   val hasUsageStatsPermission: Boolean = false,
   val snapshots24h: List<BatterySnapshot> = emptyList(),
@@ -667,11 +667,17 @@ class MainViewModel @Inject constructor(
 
   fun clearAllLocalData() {
     viewModelScope.launch {
+      val cleared = runCatching {
       telemetryCollector.setCoolingBrightnessAllowed(false)
       com.example.widget.GuardianBatteryWidget.clear(app)
+      kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        androidx.work.WorkManager.getInstance(app).cancelUniqueWork(NetraWorkScheduler.WORK_CHARGING_CSV_EXPORT).result.get()
+      }
       historyRepository.clearAllLocalData()
+      reportExporter.clearPrivateReports()
       preferencesRepository.resetAllPreferences()
-      _uiState.update { it.copy(statusMessage = "All local Netra data cleared.") }
+      }.isSuccess
+      _uiState.update { it.copy(lastCsvExportPath = null, statusMessage = if (cleared) "Local history and private reports cleared. Monitoring can record new readings." else "Some local data could not be cleared. Please try again.") }
       refreshNow(forceSnapshot = true)
     }
   }

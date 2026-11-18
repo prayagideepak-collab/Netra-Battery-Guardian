@@ -43,9 +43,9 @@ class BatteryTelemetryCollector @Inject constructor(
         ?: context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
 
     val levelRaw = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
-    val scale = intent?.getIntExtra(BatteryManager.EXTRA_SCALE, 100)?.coerceAtLeast(1) ?: 100
+    val scale = intent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
     val reportedLevel = batteryManager?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-    val levelPercent = if (levelRaw in 0..scale) ((levelRaw * 100f) / scale).toInt()
+    val levelPercent = if (scale > 0 && levelRaw in 0..scale) ((levelRaw * 100f) / scale).toInt()
       else reportedLevel?.takeIf { it in 0..100 } ?: -1
 
     val status = intent?.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN)
@@ -76,7 +76,7 @@ class BatteryTelemetryCollector @Inject constructor(
     val chargeCounterRaw = batteryManager?.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER) ?: -1L
     val chargeCounterUah = if (chargeCounterRaw > 0L) chargeCounterRaw else -1L
     val derivedCapacityMah =
-      if (chargeCounterUah > 0L && levelPercent >= 15) {
+      if (chargeCounterUah > 0L && levelPercent in 15..100) {
         ((chargeCounterUah / 1000.0) / (levelPercent / 100.0)).toInt()
       } else {
         -1 // Legacy cached capacities lack measurement provenance. Do not reuse them.

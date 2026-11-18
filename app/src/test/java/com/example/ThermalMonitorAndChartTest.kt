@@ -96,21 +96,20 @@ class ThermalMonitorAndChartTest {
     thermalMonitor.processBatteryIntent(hotIntent)
 
     val st = thermalMonitor.state.value
-    assertEquals(TemperatureZone.HOT, st.zone)
-    assertTrue(st.isThermalThrottled)
-    assertEquals(AdaptivePowerTier.SAVER, st.activeTier)
-    assertEquals(1, st.alertCount)
-    assertTrue(st.lastNotificationTitle?.contains("41.2") == true)
+    assertEquals(TemperatureZone.UNAVAILABLE, st.zone)
+    assertFalse(st.isThermalThrottled)
+    assertEquals(AdaptivePowerTier.NORMAL, st.activeTier)
+    assertEquals(0, st.alertCount)
 
     val posted = shadowNm.getNotification(NotificationHelper.ID_THERMAL_ALERT)
-    assertTrue("Expected thermal warning notification", posted != null)
+    assertTrue("Celsius alone must not claim an OEM thermal limit", posted == null)
 
     // Second HOT reading within hysteresis/cooldown must not spam notifications
     val hotAgainIntent = Intent(hotIntent).apply {
       putExtra(BatteryManager.EXTRA_TEMPERATURE, 418)
     }
     thermalMonitor.processBatteryIntent(hotAgainIntent)
-    assertEquals(1, thermalMonitor.state.value.alertCount)
+    assertEquals(0, thermalMonitor.state.value.alertCount)
 
     thermalMonitor.unregister(ThermalMonitor.DEFAULT_OWNER)
     assertFalse(thermalMonitor.state.value.isRegistered)
@@ -136,6 +135,7 @@ class ThermalMonitorAndChartTest {
     // At 3% battery (SURVIVAL), 46.8°C (CRITICAL Tier-0 safety) MUST notify immediately
     val survivalCritical = Intent(survivalHot).apply {
       putExtra(BatteryManager.EXTRA_TEMPERATURE, 468)
+      putExtra(BatteryManager.EXTRA_HEALTH, BatteryManager.BATTERY_HEALTH_OVERHEAT)
     }
     thermalMonitor.processBatteryIntent(survivalCritical)
 

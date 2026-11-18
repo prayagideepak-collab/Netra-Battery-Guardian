@@ -59,14 +59,14 @@ class BatteryThermalWidgetProvider : AppWidgetProvider() {
 
     val thermalBadgeText: String
       get() = if (temperatureCelsius.isFinite()) {
-        "${thermalStatus.labelEn} • ${telemetryText(temperatureCelsius, "°C", 1)}"
+        telemetryText(temperatureCelsius, "°C", 1)
       } else {
-        "Thermal: Unavailable"
+        ""
       }
 
     val chargingStatusText: String
       get() = when {
-        levelPercent !in 0..100 -> "Status: Unavailable"
+        levelPercent !in 0..100 -> ""
         isCharging && plugTypeLabel.isNotBlank() && plugTypeLabel != "NONE" -> "Charging ($plugTypeLabel)"
         isCharging -> "Charging"
         isPlugged -> "Plugged (Not Charging)"
@@ -77,7 +77,7 @@ class BatteryThermalWidgetProvider : AppWidgetProvider() {
       get() = if (voltageMv > 0) {
         String.format(Locale.US, "%d mV (%.2f V) • Tap for Sentinel", voltageMv, voltageMv / 1000f)
       } else {
-        "Voltage: Unavailable • Tap for Sentinel"
+        ""
       }
   }
 
@@ -99,13 +99,13 @@ class BatteryThermalWidgetProvider : AppWidgetProvider() {
       val capacityProp = bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: Int.MIN_VALUE
 
       val levelPercent = when {
-        level >= 0 && scale > 0 -> ((level * 100f) / scale.toFloat()).toInt().coerceIn(0, 100)
+        level in 0..scale && scale > 0 -> ((level * 100f) / scale.toFloat()).toInt().coerceIn(0, 100)
         capacityProp in 0..100 -> capacityProp
         else -> -1
       }
 
       val tempTenths = sticky?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE) ?: Int.MIN_VALUE
-      val tempCelsius = if (tempTenths != Int.MIN_VALUE && tempTenths in -400..1200) {
+      val tempCelsius = if (tempTenths != Int.MIN_VALUE) {
         tempTenths / 10f
       } else {
         Float.NaN
@@ -132,7 +132,6 @@ class BatteryThermalWidgetProvider : AppWidgetProvider() {
       val rawVoltage = sticky?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1) ?: -1
       val voltageMv = when {
         rawVoltage <= 0 -> -1
-        rawVoltage in 1..20 -> rawVoltage * 1000
         else -> rawVoltage
       }
 

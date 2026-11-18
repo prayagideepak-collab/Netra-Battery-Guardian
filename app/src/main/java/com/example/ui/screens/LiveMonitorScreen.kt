@@ -137,21 +137,9 @@ fun LiveMonitorContent(
   historySnapshots: List<BatterySnapshot> = emptyList(),
 ) {
   val timeFormat = remember { SimpleDateFormat("dd MMM HH:mm:ss", Locale.getDefault()) }
-  val tempColor =
-    when {
-      serviceState.temperatureCelsius >= 43f -> SemanticCriticalRed
-      serviceState.temperatureCelsius >= 40f -> SemanticHotOrange
-      serviceState.temperatureCelsius >= 36f -> SemanticWarmAmber
-      else -> SemanticCoolMint
-    }
-  val thermalStatusLabel =
-    when {
-      !serviceState.temperatureCelsius.isFinite() -> "Unavailable"
-      serviceState.temperatureCelsius >= 43f -> if (strings.isHindi) "अति गर्म" else "Critical Heat"
-      serviceState.temperatureCelsius >= 40f -> if (strings.isHindi) "गर्म" else "Hot"
-      serviceState.temperatureCelsius >= 36f -> if (strings.isHindi) "हल्का गर्म" else "Warm"
-      else -> if (strings.isHindi) "सामान्य" else "Normal"
-    }
+  val tempColor = SemanticCoolMint
+  // A Celsius reading does not establish this device's safety limits.
+  val thermalStatusLabel = ""
 
   Scaffold(
     modifier = modifier.fillMaxSize(),

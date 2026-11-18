@@ -273,7 +273,7 @@ fun AppsScreen(
               Text(app.packageName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text(
-              text = "${app.foregroundMinutesToday}m • ${app.estimatedDrainSharePercent.toInt()}%",
+              text = "${app.foregroundMinutesToday}m • ${app.estimatedDrainSharePercent.toInt()}% listed foreground time",
               style = TelemetryMonoStyle,
               color = MaterialTheme.colorScheme.primary,
             )

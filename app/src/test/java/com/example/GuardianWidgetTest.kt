@@ -29,9 +29,9 @@ class GuardianWidgetTest {
   @Test fun unknownSensorsNeverBecomeNumbersOrChargingClaims() {
     val m = GuardianBatteryWidget.buildModel(BatteryTelemetry(timestampMillis = 0)).text
     listOf("percent", "temperature", "voltage", "current", "power", "health", "eta").forEach {
-      assertEquals(it, "Unavailable", m[it])
+      assertEquals(it, "", m[it])
     }
-    assertEquals("Status: Unavailable", m["status"])
+    assertEquals("", m["status"])
     assertTrue(m.getValue("updated").startsWith("No reading yet"))
   }
 
@@ -42,7 +42,7 @@ class GuardianWidgetTest {
     assertEquals("0%", m["percent"])
     assertEquals("-2.0°C", m["temperature"])
     assertEquals("0 mA", m["current"])
-    assertEquals("Unavailable", m["power"])
+    assertEquals("", m["power"])
     assertEquals("Status: Discharging", m["status"])
     assertTrue(m.getValue("updated").startsWith("Last reading"))
   }
@@ -105,7 +105,7 @@ class GuardianWidgetTest {
     java.io.File("build/reports/guardian-ui/$name.png").apply { parentFile?.mkdirs() }
       .outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
     bitmap.recycle()
-    assertEquals(if (t.hasLevel) "${t.levelPercent}%" else "Unavailable", root.findViewById<TextView>(R.id.widget_battery_percent).text.toString())
+    assertEquals(if (t.hasLevel) "${t.levelPercent}%" else "", root.findViewById<TextView>(R.id.widget_battery_percent).text.toString())
     assertTrue(root.findViewById<TextView>(R.id.widget_updated).bottom <= root.height - root.paddingBottom)
   }
 }

@@ -27,7 +27,7 @@ class HeatingDiagnosisEngine @Inject constructor(
     coolingStepsAppliedEn: List<String>,
     coolingStepsAppliedHi: List<String>,
   ): HeatDiagnosisReport {
-    val zone = temperatureEngine.classifyZone(telemetry.temperatureCelsius, sensitivity)
+    val zone = temperatureEngine.classifyObserved(telemetry)
     val trend = temperatureEngine.computeTrend(telemetry.temperatureCelsius, telemetry.timestampMillis, sensitivity)
 
     val causes = mutableListOf<HeatCauseItem>()
@@ -117,9 +117,9 @@ class HeatingDiagnosisEngine @Inject constructor(
     if (locationHeavyApp != null) {
       causes +=
         HeatCauseItem(
-          titleEn = "Active location / navigation (${locationHeavyApp.appName})",
+          titleEn = "Location permission and foreground use (${locationHeavyApp.appName})",
           titleHi = "लोकेशन / जीपीएस उपयोग (${locationHeavyApp.appName})",
-          detailEn = "Continuous GPS sampling increases modem and sensor thermal output.",
+          detailEn = "Location permission and recent foreground use were observed; actual GPS use is not verified.",
           detailHi = "लगातार जीपीएस उपयोग से सेंसर और मॉडेम गर्म होते हैं।",
         )
       actionsEn += "Pause background location sampling if not navigating."
@@ -137,12 +137,12 @@ class HeatingDiagnosisEngine @Inject constructor(
     }
 
     if (zone.ordinal >= TemperatureZone.VERY_HOT.ordinal && telemetry.isPlugged) {
-      actionsEn.add(0, "Disconnect charger immediately until battery cools below 36°C.")
-      actionsHi.add(0, "बैटरी 36°C से नीचे आने तक तुरंत चार्जर हटा दें।")
+      actionsEn.add(0, "Android reported thermal stress. Disconnect charger and follow the phone manufacturer's advice.")
+      actionsHi.add(0, "Android ने गर्मी की चेतावनी दी है। चार्जर हटाएँ और निर्माता की सलाह मानें।")
     }
     if (zone == TemperatureZone.EMERGENCY) {
-      actionsEn.add(0, "Power off the device if temperature stays above 50°C and inspect charger/cable.")
-      actionsHi.add(0, "यदि तापमान 50°C से ऊपर रहे तो फ़ोन बंद करें और चार्जर/बैटरी की जाँच कराएँ।")
+      actionsEn.add(0, "Android reports an emergency thermal state. Stop using the phone and follow its on-screen instructions.")
+      actionsHi.add(0, "Android ने आपात थर्मल स्थिति दी है। उपयोग रोकें और फ़ोन के निर्देश मानें।")
     }
     if (zone == TemperatureZone.TOO_COLD) {
       causes +=

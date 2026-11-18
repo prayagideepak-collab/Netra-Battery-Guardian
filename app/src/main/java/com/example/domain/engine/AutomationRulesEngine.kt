@@ -64,7 +64,7 @@ class AutomationRulesEngine @Inject constructor(
     temperatureEngine.recordTemperature(telemetry.timestampMillis, telemetry.temperatureCelsius)
 
     val chargingDiagnosis: ChargingDiagnosis = chargingClassifier.diagnose(telemetry)
-    val zone = temperatureEngine.classifyZone(telemetry.temperatureCelsius, prefs.coolingSensitivity)
+    val zone = temperatureEngine.classifyObserved(telemetry)
 
     // 1. Charger connect / disconnect rules
     val prevPlugged = lastPluggedState
@@ -169,17 +169,17 @@ class AutomationRulesEngine @Inject constructor(
       lastLowBatteryAlertLevel = -1
     }
 
-    // 4. Thermal control & 5-min cool-down recovery below 35°C
+    // 4. Recovery requires an OS health-clear signal, not an invented Celsius limit.
     val now = telemetry.timestampMillis
-    if (telemetry.temperatureCelsius < 35.0f) {
+    if (telemetry.healthState == com.example.domain.model.BatteryHealthState.GOOD && telemetry.thermalLevel == com.example.domain.model.ThermalLevel.NONE) {
       if (prefs.below35SinceMillis == 0L) {
         preferencesRepository.setBelow35Since(now)
       } else if (now - prefs.below35SinceMillis >= 5 * 60_000L && lastZone != null && lastZone!!.ordinal >= TemperatureZone.WARM.ordinal) {
         voiceAssistant.announceThermalSafety(
           key = "normal_temp_restored",
-          messageEn = "Normal temperature restored.",
-          messageHi = "सामान्य तापमान वापस आ गया है।",
-          messageHinglish = "Normal temperature wapas aa gaya hai.",
+          messageEn = "Android thermal warning cleared.",
+          messageHi = "Android की थर्मल चेतावनी समाप्त हुई।",
+          messageHinglish = "Android thermal warning clear ho gayi hai.",
           prefs = prefs,
           urgent = false,
           screenOn = telemetry.screenOn,
@@ -187,10 +187,10 @@ class AutomationRulesEngine @Inject constructor(
         historyRepository.logActivity(
           category = LogCategory.HEAT,
           severity = LogSeverity.INFO,
-          titleEn = "Normal Temperature Restored",
-          titleHi = "सामान्य तापमान बहाल",
-          detailEn = "Battery stayed below 35°C for 5 minutes; Normal profile restored.",
-          detailHi = "बैटरी 5 मिनट तक 35°C से नीचे रही; सामान्य प्रोफ़ाइल बहाल की गई।",
+          titleEn = "OS Thermal Warning Cleared",
+          titleHi = "OS थर्मल चेतावनी समाप्त",
+          detailEn = "Android reported GOOD battery health and no thermal warning for 5 minutes.",
+          detailHi = "Android ने 5 मिनट तक GOOD बैटरी स्थिति और कोई थर्मल चेतावनी नहीं दी।",
           whyEn = "Hysteresis ensures Cooling Mode does not toggle prematurely.",
           whyHi = "5 मिनट की पुष्टि से कूलिंग मोड बार-बार चालू-बंद नहीं होता।",
         )
@@ -204,6 +204,7 @@ class AutomationRulesEngine @Inject constructor(
     val coolingActive = thermalCooling || manualCooling
     val knownCoolingState: Boolean? = when {
       coolingActive -> true
+      telemetry.healthState == com.example.domain.model.BatteryHealthState.GOOD && telemetry.thermalLevel == com.example.domain.model.ThermalLevel.NONE -> false
       zone == TemperatureZone.UNAVAILABLE -> null
       else -> false
     }

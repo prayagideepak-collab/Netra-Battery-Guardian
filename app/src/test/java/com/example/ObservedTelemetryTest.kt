@@ -32,7 +32,7 @@ class ObservedTelemetryTest {
     assertFalse(t.hasTemperature)
     assertFalse(t.hasPower)
     assertEquals(-1, t.estimatedCapacityMah)
-    assertEquals("Unavailable", telemetryText(t.currentMa))
+    assertEquals("", telemetryText(t.currentMa))
     assertEquals(TemperatureZone.UNAVAILABLE, TemperatureControlEngine().classifyZone(t.temperatureCelsius))
     assertNull(ChargingSpeedClassifier().diagnose(t).estimatedMinutesRemaining)
   }
@@ -49,7 +49,7 @@ class ObservedTelemetryTest {
       assertEquals(67, rows.first().levelPercent)
       assertFalse(rows.first().temperatureCelsius.isFinite())
       assertFalse(rows.first().currentMa.isFinite())
-      assertEquals("Unavailable", telemetryText(rows.first().currentMa))
+      assertEquals("", telemetryText(rows.first().currentMa))
     } finally { db.close() }
   }
 
@@ -66,7 +66,7 @@ class ObservedTelemetryTest {
       val closed = sessions.first { it.startTimeMillis == 1000L }
       assertEquals(2000L, closed.endTimeMillis)
       assertEquals(-1, closed.endLevel)
-      assertEquals("Unavailable", telemetryText(closed.maxPowerWatts))
+      assertEquals("", telemetryText(closed.maxPowerWatts))
     } finally { db.close() }
   }
 

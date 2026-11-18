@@ -1,28 +1,33 @@
-# Netra Battery Guardian 1.0.0
+# Netra Battery Guardian 1.0.1
 
-First standalone Guardian release, signed with the established Netra ecosystem
-certificate. Android 7.0 (API 24) or newer. Package:
-`com.aistudio.netrabattery.kxmzqr`; versionCode 1.
+Guardian-only device-data correction after the new dashboard update. Package
+`com.aistudio.netrabattery.kxmzqr`, versionCode 2, Android 7.0 (API 24) or newer.
 
-- Local battery and temperature monitoring, history and private user-selected
-  report export. Unsupported measurements show Unavailable.
-- Native home-screen widget fed by the existing monitor, without a second
-  polling service. Readings are labeled as the last observed sample. English and
-  Hindi labels, signed sensor readings, full state and observed-session estimates
-  are shown without inventing missing values.
-- Optional cooling brightness consent starts OFF, including upgrades. Android
-  Modify system settings permission is separate. Saved-setting recovery keeps
-  newer manual choices and reports unresolved/ambiguous recovery honestly.
-- Media-aware voice gate and observed-session approximate time estimates.
+- Unsupported numeric readings are blank or omitted. Real zero remains zero.
+- No fixed 4500 mAh fallback, Doze savings formula, battery-health score, inferred
+  wear/design capacity, or invented storage-category percentages.
+- Counter-derived capacity appears only with observed charge counter and battery
+  percentage, labeled approximate. It is not rated or design capacity.
+- Signed battery current and derived battery-side power retain the sensor sign.
+  They do not measure wall-charger input power.
+- Thermal alerts/classifications use Android-reported thermal or overheat states,
+  not a claimed universal 45/46-degree OEM limit. Numeric temperature remains a
+  sensor observation; charts do not invent device safety bands.
+- Storage totals come from filesystem observations. Only Netra cache is attributed;
+  remaining used bytes are unattributed.
+- Session gain updates and database upgrade schema are corrected. Reset clears
+  app-private reports and cancels queued CSV work. CSV text is escaped against
+  spreadsheet formulas. Legacy guessed health fields are not re-exported as facts.
+- Existing night-silent and screen-off voice policy is retained.
 
 ## Verification and limits
 
-Automated unit, privacy, lint and build checks are required on the exact main
-candidate. Android test renders are controlled fixtures, not phone readings.
-Physical-device launcher resizing, on-device voice routing and real document
-picker acceptance are not yet verified. No zero-battery-impact or guaranteed
-cooling claim is made. The app cannot install Android OS security patches.
+The signed candidate must be read back before publication. Test renders use
+controlled fixtures, not this phone's readings. Physical-phone install/upgrade,
+launcher/widget resizing, background speech routing and document-picker export
+acceptance are NOT RUN. API support varies by phone. No guaranteed cooling,
+battery savings, zero battery impact or Android OS security-patch claim is made.
 
-This signing certificate may differ from an earlier AI Studio development build.
-Android may require uninstalling that build before installing this release, which
-can remove its local data. This release does not claim cross-app history import.
+Uses the established Netra release signing certificate. A prior AI Studio build
+may have a different certificate; Android can require uninstalling it first,
+which can remove local data. No cross-app history import is claimed.

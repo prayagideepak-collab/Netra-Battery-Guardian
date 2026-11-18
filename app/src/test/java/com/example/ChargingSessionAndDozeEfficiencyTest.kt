@@ -198,9 +198,9 @@ class ChargingSessionAndDozeEfficiencyTest {
     assertEquals(2 * 3_600_000L, metrics.totalDozeTimeMillis)
     assertEquals(1, metrics.completedSessionsCount)
     assertEquals(2, metrics.transitionsLoggedCount)
-    assertEquals(2.9f, metrics.estimatedBatterySavedPercent, 0.05f)
-    assertEquals(145, metrics.estimatedMahSaved)
-    assertTrue(metrics.efficiencyScorePercent >= 55)
+    assertTrue(metrics.estimatedBatterySavedPercent.isNaN())
+    assertEquals(-1, metrics.estimatedMahSaved)
+    assertEquals(-1, metrics.efficiencyScorePercent)
     assertEquals("2h 0m", DozeEfficiencyCalculator.formatDuration(metrics.totalDozeTimeMillis))
   }
 
@@ -250,7 +250,7 @@ class ChargingSessionAndDozeEfficiencyTest {
 
     composeTestRule.onNodeWithTag("doze_efficiency_card").assertIsDisplayed()
     composeTestRule.onNodeWithTag("doze_total_time_value").assertTextContains("2h 0m")
-    composeTestRule.onNodeWithTag("doze_energy_saved_value").assertTextContains("2.9%", substring = true)
+    composeTestRule.onNodeWithTag("doze_energy_saved_value").assertDoesNotExist()
     composeTestRule.onNodeWithTag("doze_transitions_value").assertTextContains("1 (2 ev)")
   }
 }

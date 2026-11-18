@@ -13,9 +13,9 @@ data class DozeEfficiencyMetrics(
   val completedSessionsCount: Int = 0,
   val transitionsLoggedCount: Int = 0,
   val isCurrentlyInDoze: Boolean = false,
-  val estimatedBatterySavedPercent: Float = 0f,
-  val estimatedMahSaved: Int = 0,
-  val efficiencyScorePercent: Int = 0,
+  val estimatedBatterySavedPercent: Float = Float.NaN,
+  val estimatedMahSaved: Int = -1,
+  val efficiencyScorePercent: Int = -1,
   val efficiencyRatingLabelEn: String = "Standby",
   val efficiencyRatingLabelHi: String = "स्टैंडबाय",
 )
@@ -31,9 +31,6 @@ class DozeEfficiencyCalculator @Inject constructor() {
   companion object {
     const val TITLE_ENTERED_DOZE = "Entered Doze Mode"
     const val TITLE_EXITED_DOZE = "Exited Doze Mode"
-
-    // Conservative Android idle savings estimate (~1.45% / hr when Doze pauses wakeups vs unthrottled idle)
-    private const val ESTIMATED_SAVED_PERCENT_PER_HOUR = 1.45f
 
     fun formatDuration(millis: Long): String {
       val safeMillis = millis.coerceAtLeast(0L)
@@ -53,7 +50,7 @@ class DozeEfficiencyCalculator @Inject constructor() {
   fun calculate(
     activityLogs: List<ActivityLogEntity>,
     dozeState: DozeMonitorState,
-    estimatedCapacityMah: Int = 4500,
+    estimatedCapacityMah: Int = -1,
     nowMillis: Long = System.currentTimeMillis(),
   ): DozeEfficiencyMetrics {
     val dozeTransitions = activityLogs
@@ -86,7 +83,7 @@ class DozeEfficiencyCalculator @Inject constructor() {
     }
 
     val ongoingStartMillis =
-      activeStartMillis ?: if (dozeState.isInDozeMode && dozeState.lastTransitionMillis > 0L) {
+      activeStartMillis?.takeIf { dozeState.isInDozeMode } ?: if (dozeState.isInDozeMode && dozeState.lastTransitionMillis > 0L) {
         dozeState.lastTransitionMillis
       } else {
         null
@@ -105,32 +102,20 @@ class DozeEfficiencyCalculator @Inject constructor() {
       dozeState.enterDozeCount + dozeState.exitDozeCount,
     )
 
-    val hoursInDoze = totalMillis.toFloat() / 3_600_000f
-    val savedPercent = (hoursInDoze * ESTIMATED_SAVED_PERCENT_PER_HOUR).coerceAtLeast(0f)
-    val capacityMah = estimatedCapacityMah.coerceAtLeast(1000)
-    val savedMah = ((savedPercent / 100f) * capacityMah).roundToInt().coerceAtLeast(0)
-
-    val score =
-      if (totalMillis == 0L && transitionsCount == 0) {
-        0
-      } else {
-        (35f + (hoursInDoze * 13f) + (completedCount * 7f)).roundToInt().coerceIn(20, 100)
-      }
-
-    val (ratingEn, ratingHi) =
-      when {
-        score >= 85 -> "Ultra Efficient" to "अत्यंत कुशल"
-        score >= 55 -> "Optimal Saving" to "उत्तम बचत"
-        transitionsCount > 0 || dozeState.isInDozeMode -> "Active Guard" to "सक्रिय सुरक्षा"
-        else -> "Standby Ready" to "तैयार स्थिति"
-      }
+    // Transition duration is observable. Energy saved requires a verified
+    // counterfactual baseline that Android does not supply here.
+    val savedPercent = Float.NaN
+    val savedMah = -1
+    val score = -1
+    val ratingEn = if (dozeState.isInDozeMode) "In Doze" else "Not in Doze"
+    val ratingHi = if (dozeState.isInDozeMode) "डोज़ सक्रिय" else "डोज़ सक्रिय नहीं"
 
     return DozeEfficiencyMetrics(
       totalDozeTimeMillis = totalMillis,
       currentSessionMillis = currentSessionMillis,
       completedSessionsCount = completedCount,
       transitionsLoggedCount = transitionsCount,
-      isCurrentlyInDoze = dozeState.isInDozeMode || activeStartMillis != null,
+      isCurrentlyInDoze = dozeState.isInDozeMode,
       estimatedBatterySavedPercent = savedPercent,
       estimatedMahSaved = savedMah,
       efficiencyScorePercent = score,

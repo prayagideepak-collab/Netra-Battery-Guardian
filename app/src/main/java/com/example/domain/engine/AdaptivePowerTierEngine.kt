@@ -57,10 +57,10 @@ class AdaptivePowerTierEngine @Inject constructor() {
     // Thermal throttling with hysteresis: engages >= 40C / MODERATE, clears < 38C & < MODERATE
     val thermalHotNow =
       telemetry.thermalLevel.ordinal >= ThermalLevel.MODERATE.ordinal ||
-        telemetry.temperatureCelsius >= 40f
+        telemetry.healthState == com.example.domain.model.BatteryHealthState.OVERHEAT
     val thermalClearNow =
-      telemetry.thermalLevel.ordinal < ThermalLevel.MODERATE.ordinal &&
-        telemetry.temperatureCelsius < 38f
+      telemetry.thermalLevel == ThermalLevel.NONE &&
+        telemetry.healthState != com.example.domain.model.BatteryHealthState.OVERHEAT
 
     if (thermalHotNow) thermalLatched = true
     else if (thermalClearNow) thermalLatched = false

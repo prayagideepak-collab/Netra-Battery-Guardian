@@ -1,5 +1,6 @@
 package com.example.data.local.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -14,7 +15,7 @@ data class ChargingSessionEntity(
   val endTimeMillis: Long? = null,
   val startLevel: Int,
   val endLevel: Int,
-  val percentageGained: Int = (endLevel - startLevel).coerceAtLeast(0),
+  @ColumnInfo(defaultValue = "0") val percentageGained: Int = (endLevel - startLevel).coerceAtLeast(0),
   val peakTempCelsius: Float,
   val avgPowerWatts: Float,
   val maxPowerWatts: Float,
