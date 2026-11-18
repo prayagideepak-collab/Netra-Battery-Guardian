@@ -70,7 +70,7 @@ class AppPowerInspector @Inject constructor(
       val appInfo = runCatching { pm.getApplicationInfo(pkg, 0) }.getOrNull() ?: return@mapIndexedNotNull null
       val appName = pm.getApplicationLabel(appInfo).toString()
       val fgMinutes = fgMs / 60_000L
-      val sharePercent = ((fgMs * 100f) / totalForegroundMs).coerceIn(1f, 99f)
+      val sharePercent = ((fgMs * 100f) / totalForegroundMs).coerceIn(0f, 100f)
 
       val hasLoc =
         pm.checkPermission(Manifest.permission.ACCESS_FINE_LOCATION, pkg) == PackageManager.PERMISSION_GRANTED ||
@@ -90,8 +90,8 @@ class AppPowerInspector @Inject constructor(
             "High gaming screen/GPU time. Take cooling breaks and lower brightness." to
               "गेमिंग में ज़्यादा उपयोग। तापमान कम रखने के लिए बीच-बीच में ब्रेक लें।"
           hasLoc && fgMinutes >= 15 ->
-            "Uses location permission. Set location access to 'While using the app' in App Info." to
-              "यह ऐप लोकेशन का उपयोग करता है। सेटिंग में इसे केवल 'ऐप उपयोग करते समय' पर रखें।"
+            "Has location permission; actual GPS activity is not measured. Set location access to 'While using the app' in App Info." to
+              "इस ऐप को लोकेशन की अनुमति है; वास्तविक GPS उपयोग मापा नहीं गया। सेटिंग में इसे केवल 'ऐप उपयोग करते समय' पर रखें।"
           else ->
             "Review background activity or restrict notifications if unused." to
               "यदि आवश्यक न हो तो बैकग्राउंड गतिविधि या अतिरिक्त नोटिफ़िकेशन सीमित करें।"
@@ -101,7 +101,7 @@ class AppPowerInspector @Inject constructor(
         packageName = pkg,
         appName = appName,
         foregroundMinutesToday = fgMinutes,
-        estimatedWakeups = (fgMinutes / 4).toInt().coerceAtLeast(1),
+        estimatedWakeups = -1,
         batteryRank = index + 1,
         estimatedDrainSharePercent = sharePercent,
         hasLocationPermission = hasLoc,

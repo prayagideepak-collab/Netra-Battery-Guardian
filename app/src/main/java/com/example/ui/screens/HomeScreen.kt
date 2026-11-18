@@ -357,7 +357,7 @@ fun HomeScreen(
             ) {
               Text("#${app.batteryRank} ${app.appName}", style = MaterialTheme.typography.bodyLarge)
               Text(
-                "${app.foregroundMinutesToday}m (${app.estimatedDrainSharePercent.toInt()}%)",
+                "${app.foregroundMinutesToday}m (${app.estimatedDrainSharePercent.toInt()}% foreground)",
                 style = TelemetryMonoStyle,
                 color = MaterialTheme.colorScheme.primary,
               )

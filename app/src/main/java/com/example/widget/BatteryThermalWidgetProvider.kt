@@ -99,13 +99,13 @@ class BatteryThermalWidgetProvider : AppWidgetProvider() {
       val capacityProp = bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: Int.MIN_VALUE
 
       val levelPercent = when {
-        level >= 0 && scale > 0 -> ((level * 100f) / scale.toFloat()).toInt().coerceIn(0, 100)
+        level in 0..scale && scale > 0 -> ((level * 100f) / scale.toFloat()).toInt().coerceIn(0, 100)
         capacityProp in 0..100 -> capacityProp
         else -> -1
       }
 
       val tempTenths = sticky?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE) ?: Int.MIN_VALUE
-      val tempCelsius = if (tempTenths != Int.MIN_VALUE && tempTenths in -400..1200) {
+      val tempCelsius = if (tempTenths != Int.MIN_VALUE) {
         tempTenths / 10f
       } else {
         Float.NaN
@@ -132,7 +132,6 @@ class BatteryThermalWidgetProvider : AppWidgetProvider() {
       val rawVoltage = sticky?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1) ?: -1
       val voltageMv = when {
         rawVoltage <= 0 -> -1
-        rawVoltage in 1..20 -> -1
         else -> rawVoltage
       }
 
