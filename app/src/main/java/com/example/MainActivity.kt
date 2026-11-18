@@ -281,6 +281,8 @@ private fun NetraRootScaffold(
               strings = strings,
               onToggleCoolingMode = viewModel::toggleCoolingModeQuick,
               onOpenWriteSettings = viewModel::openWriteSettings,
+              onSetCoolingBrightnessAllowed = viewModel::setCoolingBrightnessAllowed,
+              onRetryCoolingBrightnessRestore = viewModel::retryCoolingBrightnessRestore,
             )
           }
           composable<AppsRoute> {

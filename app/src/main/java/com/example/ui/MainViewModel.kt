@@ -89,6 +89,7 @@ data class NetraUiState(
   val prefs: UserPreferences = UserPreferences(),
   val selfHealingStatus: SelfHealingStatus = SelfHealingStatus(),
   val thermalState: ThermalMonitorState = ThermalMonitorState(),
+  val coolingBrightness: com.example.data.local.system.CoolingBrightnessState = com.example.data.local.system.CoolingBrightnessState(),
   val dozeState: DozeMonitorState = DozeMonitorState(),
   val batteryHealthLogs: List<BatteryHealthLogEntity> = emptyList(),
   val diskUsageReport: DiskUsageReport? = null,
@@ -140,6 +141,9 @@ class MainViewModel @Inject constructor(
 
   init {
     observeDatabaseAndPreferences()
+    viewModelScope.launch {
+      telemetryCollector.coolingBrightnessState.collect { brightness -> _uiState.update { it.copy(coolingBrightness = brightness) } }
+    }
     viewModelScope.launch {
       val health = selfHealingSupervisor.runNaturalHealthCheck(triggerSource = "app_launch")
       _uiState.update { it.copy(selfHealingStatus = health) }
@@ -242,6 +246,7 @@ class MainViewModel @Inject constructor(
   }
 
   fun onForegroundStopped() {
+    telemetryCollector.stopCoolingBrightness()
     isForegroundActive = false
     _isUiVisible.value = false
     thermalMonitor.unregister(ThermalMonitor.OWNER_FOREGROUND_UI)
@@ -367,15 +372,18 @@ class MainViewModel @Inject constructor(
       val current = _uiState.value.prefs.manualProfileOverride
       val next = if (current == GuardianProfile.COOLING) null else GuardianProfile.COOLING
       preferencesRepository.setManualProfileOverride(next)
-      if (next == GuardianProfile.COOLING) {
-        val lowered = telemetryCollector.tryLowerBrightnessForCooling()
-        val msg =
-          if (lowered) "Cooling workflow activated & brightness lowered."
-          else "Cooling Mode active. Lower brightness or pause heavy apps."
-        _uiState.update { it.copy(statusMessage = msg) }
-      }
+      _uiState.update { it.copy(statusMessage = "Cooling monitoring updated. Brightness changes require your optional consent.") }
       refreshNow()
     }
+  }
+
+  fun setCoolingBrightnessAllowed(allowed: Boolean) {
+    telemetryCollector.setCoolingBrightnessAllowed(allowed)
+    refreshNow()
+  }
+
+  fun retryCoolingBrightnessRestore() {
+    telemetryCollector.retryCoolingBrightnessRestore()
   }
 
   fun toggleLocationSaverQuick() {
@@ -570,6 +578,7 @@ class MainViewModel @Inject constructor(
 
   fun clearAllLocalData() {
     viewModelScope.launch {
+      telemetryCollector.setCoolingBrightnessAllowed(false)
       historyRepository.clearAllLocalData()
       preferencesRepository.resetAllPreferences()
       _uiState.update { it.copy(statusMessage = "All local Netra data cleared.") }
@@ -582,6 +591,7 @@ class MainViewModel @Inject constructor(
   }
 
   override fun onCleared() {
+    telemetryCollector.stopCoolingBrightness()
     thermalMonitor.unregister(ThermalMonitor.OWNER_FOREGROUND_UI)
     unregisterBatteryReceiver()
     voiceAssistant.shutdown()
