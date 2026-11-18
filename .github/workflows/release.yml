@@ -1,0 +1,102 @@
+name: Guardian signed release
+on:
+  workflow_dispatch:
+    inputs:
+      expected_head:
+        description: Exact green main SHA approved for release
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: guardian-production-release
+  cancel-in-progress: false
+jobs:
+  signed-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: read
+      checks: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.expected_head }}
+      - name: Require immutable green main candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD: ${{ inputs.expected_head }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_SHA" = "$EXPECTED_HEAD"
+          test "$GITHUB_ACTOR" != 'dependabot[bot]'
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          test "$(gh api repos/$GITHUB_REPOSITORY/branches/main --jq .commit.sha)" = "$EXPECTED_HEAD"
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/android.yml/runs?head_sha=$EXPECTED_HEAD&event=push" > "$RUNNER_TEMP/ci.json"
+          python3 -c 'import json,sys; r=json.load(open(sys.argv[1]))["workflow_runs"]; assert r and r[0]["status"]=="completed" and r[0]["conclusion"]=="success", "Exact main privacy/test/lint/build gate not green"' "$RUNNER_TEMP/ci.json"
+          python3 scripts/check_privacy.py
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+          cache-disabled: true
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools platforms;android-36.1 build-tools;36.0.0
+      - name: Restore established Netra signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$KEYSTORE_BASE64"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/netra-release.jks"
+      - name: Build signed release
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/netra-release.jks
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: gradle --no-daemon --stacktrace assembleRelease
+      - name: Verify identity, signature and file hashes
+        env:
+          EXPECTED_CERT_SHA256: ${{ secrets.RELEASE_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK" > "$RUNNER_TEMP/signature.txt"
+          test -n "$EXPECTED_CERT_SHA256"
+          ACTUAL="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/signature.txt" | tr -d '[:space:]' | tr 'A-F' 'a-f')"
+          test "$ACTUAL" = "$EXPECTED_CERT_SHA256"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" > "$RUNNER_TEMP/badging.txt"
+          grep -F "package: name='com.aistudio.netrabattery.kxmzqr' versionCode='1' versionName='1.0.0'" "$RUNNER_TEMP/badging.txt"
+          mkdir -p release-candidate
+          cp "$APK" release-candidate/app-release.apk
+          cp "$APK" release-candidate/Guardian-v1.0.0.apk
+          cp "$RUNNER_TEMP/signature.txt" release-candidate/signature.txt
+          cp "$RUNNER_TEMP/badging.txt" release-candidate/badging.txt
+          printf 'sourceSha: %s\nversionCode: 1\nversionName: 1.0.0\n' "$(git rev-parse HEAD)" > release-candidate/provenance.txt
+          (cd release-candidate && sha256sum app-release.apk Guardian-v1.0.0.apk > SHA256SUMS)
+      - name: Preserve signed candidate for independent readback
+        uses: actions/upload-artifact@v4
+        with:
+          name: guardian-signed-candidate-${{ inputs.expected_head }}
+          retention-days: 3
+          path: release-candidate/
+          if-no-files-found: error
+      - name: Stage draft release, never publish automatically
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD: ${{ inputs.expected_head }}
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/$GITHUB_REPOSITORY/branches/main --jq .commit.sha)" = "$EXPECTED_HEAD"
+          python3 -c 'import json,subprocess; r=json.loads(subprocess.check_output(["gh","api","repos/"+__import__("os").environ["GITHUB_REPOSITORY"]+"/releases"])); assert not any(x["tag_name"]=="v1.0.0" for x in r), "Version already exists"'
+          gh release create v1.0.0 release-candidate/app-release.apk release-candidate/Guardian-v1.0.0.apk release-candidate/SHA256SUMS release-candidate/provenance.txt release-candidate/signature.txt --target "$EXPECTED_HEAD" --title 'Netra Battery Guardian 1.0.0' --notes-file RELEASE-NOTES.md --draft
+      - name: Remove temporary signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/netra-release.jks"
