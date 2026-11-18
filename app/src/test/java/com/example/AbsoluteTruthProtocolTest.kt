@@ -36,6 +36,12 @@ class AbsoluteTruthProtocolTest {
     assertEquals("-700 mA",reading.liveCurrentText)
     assertFalse(reading.polarityNoteEn.contains("validated"))
   }
+  @Test fun celsiusIsNotAnOemLimit() {
+    val engine = com.example.domain.engine.TemperatureControlEngine()
+    assertEquals(TemperatureZone.UNAVAILABLE, engine.classifyObserved(BatteryTelemetry(temperatureCelsius=45f)))
+    assertEquals(TemperatureZone.CRITICAL, engine.classifyObserved(BatteryTelemetry(temperatureCelsius=30f,healthState=BatteryHealthState.OVERHEAT)))
+    assertEquals(TemperatureZone.EMERGENCY, engine.classifyObserved(BatteryTelemetry(thermalLevel=ThermalLevel.EMERGENCY)))
+  }
   @Test fun storageNeverInventsMissingCategories() {
     val items=StorageCategoryBreakdownCalculator.computeCategories(StorageInsight(0,0,0,0f,0,0),null)
     assertTrue(items.isEmpty())

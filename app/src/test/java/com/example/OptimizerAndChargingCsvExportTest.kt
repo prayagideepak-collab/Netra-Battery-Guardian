@@ -135,7 +135,7 @@ class OptimizerAndChargingCsvExportTest {
     )
 
     assertFalse(report.throttledDueToLowPower)
-    assertTrue(report.healthScore < 80)
+    assertEquals(-1, report.healthScore)
     assertTrue(
       "Must recommend closing/restricting heavy app",
       report.recommendations.any { it.actionTarget == OptimizerActionTarget.APP_INFO && it.packageHint == "com.heavy.video" },
@@ -182,7 +182,7 @@ class OptimizerAndChargingCsvExportTest {
         estimatedCapacityMah = 4185,
         degradationPercent = 7.0f,
         healthPercent = 93.0f,
-        sourceLabel = "COULOMB_COUNTER_ESTIMATE",
+        sourceLabel = "OBSERVED_V2_OS_CYCLE_AND_COUNTER_OR_UNAVAILABLE",
       )
     )
     db.batteryDao().insertSnapshot(
@@ -215,7 +215,10 @@ class OptimizerAndChargingCsvExportTest {
     assertEquals(1, exported.snapshotRows)
     val csvContent = exported.file!!.readText()
     assertTrue(csvContent.contains("HEALTH_LOG"))
-    assertTrue(csvContent.contains("34.50,4500,4185,7.0,93.0"))
+    assertTrue(csvContent.contains("34.5,,4185,,,"))
+    assertFalse(csvContent.contains("4500"))
+    exporter.clearPrivateReports()
+    assertFalse(exported.file!!.exists())
     assertTrue(csvContent.contains("TEMP_SNAPSHOT"))
     assertTrue(csvContent.contains(",76,36.4,4120,"))
   }

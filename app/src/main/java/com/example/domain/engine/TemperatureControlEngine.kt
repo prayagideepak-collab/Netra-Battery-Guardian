@@ -28,23 +28,20 @@ class TemperatureControlEngine @Inject constructor() {
     tempC: Float,
     sensitivity: CoolingSensitivity = CoolingSensitivity.BALANCED,
   ): TemperatureZone {
-    if (!tempC.isFinite()) return TemperatureZone.UNAVAILABLE
-    val offset =
-      when (sensitivity) {
-        CoolingSensitivity.RELAXED -> 2.0f
-        CoolingSensitivity.BALANCED -> 0.0f
-        CoolingSensitivity.AGGRESSIVE -> -2.0f
-      }
-    return when {
-      tempC < 0f -> TemperatureZone.TOO_COLD
-      tempC < 16f -> TemperatureZone.COLD
-      tempC >= 50f -> TemperatureZone.EMERGENCY
-      tempC >= 46f -> TemperatureZone.CRITICAL
-      tempC >= (43f + offset) -> TemperatureZone.VERY_HOT
-      tempC >= (40f + offset) -> TemperatureZone.HOT
-      tempC >= (36f + offset) -> TemperatureZone.WARM
-      else -> TemperatureZone.NORMAL
-    }
+    // A numeric sensor alone does not reveal this phone's thermal limits.
+    return TemperatureZone.UNAVAILABLE
+  }
+
+  fun classifyObserved(t: com.example.domain.model.BatteryTelemetry): TemperatureZone = when {
+    t.healthState == com.example.domain.model.BatteryHealthState.OVERHEAT -> TemperatureZone.CRITICAL
+    t.healthState == com.example.domain.model.BatteryHealthState.COLD -> TemperatureZone.COLD
+    t.thermalLevel == com.example.domain.model.ThermalLevel.SHUTDOWN ||
+      t.thermalLevel == com.example.domain.model.ThermalLevel.EMERGENCY -> TemperatureZone.EMERGENCY
+    t.thermalLevel == com.example.domain.model.ThermalLevel.CRITICAL -> TemperatureZone.CRITICAL
+    t.thermalLevel == com.example.domain.model.ThermalLevel.SEVERE -> TemperatureZone.VERY_HOT
+    t.thermalLevel == com.example.domain.model.ThermalLevel.MODERATE -> TemperatureZone.HOT
+    t.thermalLevel == com.example.domain.model.ThermalLevel.LIGHT -> TemperatureZone.WARM
+    else -> TemperatureZone.UNAVAILABLE // NONE is not a battery-specific safety certificate.
   }
 
   fun computeTrend(
@@ -73,8 +70,8 @@ class TemperatureControlEngine @Inject constructor() {
         TemperatureTrendResult(
           deltaPerMinute = deltaPerMinute,
           status = TrendStatus.HIGH_HEAT_RISK,
-          messageEn = "High heat risk detected.",
-          messageHi = "तेज़ी से तापमान बढ़ने का गंभीर ख़तरा है।",
+          messageEn = "Observed temperature rising faster than 1°C per minute.",
+          messageHi = "दर्ज तापमान प्रति मिनट 1°C से अधिक बढ़ रहा है।",
         )
       deltaPerMinute > 0.5f ->
         TemperatureTrendResult(

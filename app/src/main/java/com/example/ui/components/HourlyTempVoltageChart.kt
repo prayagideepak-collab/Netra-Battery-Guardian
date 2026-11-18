@@ -177,18 +177,6 @@ fun HourlyTempVoltageChart(
           )
         }
 
-        // High-temperature 40°C warning threshold dashed line
-        if (40f in minTemp..maxTemp) {
-          val warnY = size.height - (((40f - minTemp) / tempSpan).coerceIn(0f, 1f) * size.height)
-          drawLine(
-            color = warnColor,
-            start = Offset(0f, warnY),
-            end = Offset(size.width, warnY),
-            strokeWidth = 1.2.dp.toPx(),
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f), 0f),
-          )
-        }
-
         val tempLine = Path()
         val tempFill = Path()
         val voltLine = Path()

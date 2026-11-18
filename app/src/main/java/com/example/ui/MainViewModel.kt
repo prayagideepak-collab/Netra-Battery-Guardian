@@ -83,7 +83,7 @@ data class NetraUiState(
   val activeProfile: GuardianProfile = GuardianProfile.NORMAL,
   val powerBudget: PowerBudgetMetrics =
     PowerBudgetMetrics(AdaptivePowerTier.NORMAL, 0, 0, 0, 15, false),
-  val storageInsight: StorageInsight = StorageInsight(1L, 0L, 1L, 50f, 0L, 0L),
+  val storageInsight: StorageInsight = StorageInsight(0L, 0L, 0L, 0f, 0L, 0L),
   val topApps: List<AppPowerInsight> = emptyList(),
   val hasUsageStatsPermission: Boolean = false,
   val snapshots24h: List<BatterySnapshot> = emptyList(),

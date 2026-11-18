@@ -104,30 +104,28 @@ class LocalReportExporter @Inject constructor(
       sb.appendLine("record_type,timestamp,level_percent,temp_c,voltage_mv,current_ma,power_watts,charging,thermal_level,cycle_count,design_capacity_mah,estimated_capacity_mah,degradation_percent,health_percent,source_or_profile,title,detail")
 
       healthLogs.forEach { h ->
-        sb.appendLine(
-          "HEALTH_LOG,${dateFormatter.format(Date(h.timestampMillis))},,,,,,true,,${
-            String.format(Locale.US, "%.2f", h.estimatedCycleCount)
-          },${h.designCapacityMah},${h.estimatedCapacityMah},${
-            String.format(Locale.US, "%.1f", h.degradationPercent)
-          },${String.format(Locale.US, "%.1f", h.healthPercent)},${h.sourceLabel},Daily Cycle & Capacity,Health ${
-            String.format(Locale.US, "%.1f", h.healthPercent)
-          }%",
-        )
+        // Only current provenance-marked observations. Legacy guessed design/wear
+        // records are never re-exported as measured battery health.
+        if (h.sourceLabel.startsWith("OBSERVED_V2")) {
+          val cycle = h.estimatedCycleCount.takeIf { it.isFinite() && it >= 0f }?.toString() ?: ""
+          val capacity = h.estimatedCapacityMah.takeIf { it > 0 }?.toString() ?: ""
+          sb.appendLine("HEALTH_LOG,${dateFormatter.format(Date(h.timestampMillis))},,,,,,,${cycle},,${capacity},,,${h.sourceLabel},,")
+        }
       }
 
       snapshots.forEach { s ->
         sb.appendLine(
-          "TEMP_SNAPSHOT,${dateFormatter.format(Date(s.timestampMillis))},${s.levelPercent},${
+          "TEMP_SNAPSHOT,${dateFormatter.format(Date(s.timestampMillis))},${s.levelPercent.takeIf { it in 0..100 } ?: ""},${
             telemetryText(s.temperatureCelsius)
-          },${s.voltageMv},${telemetryText(s.currentMa, decimals = 0)},${
+          },${s.voltageMv.takeIf { it > 0 } ?: ""},${telemetryText(s.currentMa, decimals = 0)},${
             telemetryText(s.powerWatts, decimals = 2)
           },${s.isCharging},${s.thermalLevel},,,,,,${s.activeProfile},,",
         )
       }
 
       logs.forEach { log ->
-        val safeTitle = log.titleEn.replace(",", ";")
-        val safeDetail = log.detailEn.replace(",", ";")
+        val safeTitle = csvText(log.titleEn)
+        val safeDetail = csvText(log.detailEn)
         sb.appendLine(
           "LOG_${log.category},${dateFormatter.format(Date(log.timestampMillis))},,,,,,,,,,,,,${log.severity},$safeTitle,$safeDetail",
         )
@@ -148,7 +146,7 @@ class LocalReportExporter @Inject constructor(
     } }
 
   suspend fun exportCsv(): File =
-    withContext(Dispatchers.IO) {
+    withContext(Dispatchers.IO) { reportMutex.withLock {
       val dir = getReportsDir()
       val file = File(dir, "netra_battery_report_${fileStampFormatter.format(Date())}.csv")
       val snapshots = historyRepository.getSnapshotsSince(System.currentTimeMillis() - 7L * 24L * 3600_000L)
@@ -161,7 +159,7 @@ class LocalReportExporter @Inject constructor(
 
       snapshots.forEach { s ->
         sb.appendLine(
-          "SNAPSHOT,${dateFormatter.format(Date(s.timestampMillis))},${s.levelPercent},${
+          "SNAPSHOT,${dateFormatter.format(Date(s.timestampMillis))},${s.levelPercent.takeIf { it in 0..100 } ?: ""},${
             telemetryText(s.temperatureCelsius)
           },${if (s.voltageMv > 0) s.voltageMv.toString() else ""},${telemetryText(s.currentMa, decimals = 0)},${
             telemetryText(s.powerWatts, decimals = 2)
@@ -170,8 +168,8 @@ class LocalReportExporter @Inject constructor(
       }
 
       logs.forEach { log ->
-        val safeTitle = log.titleEn.replace(",", ";")
-        val safeDetail = log.detailEn.replace(",", ";")
+        val safeTitle = csvText(log.titleEn)
+        val safeDetail = csvText(log.detailEn)
         sb.appendLine(
           "LOG_${log.category},${dateFormatter.format(Date(log.timestampMillis))},,,,,,,,${log.severity},$safeTitle,$safeDetail"
         )
@@ -179,10 +177,10 @@ class LocalReportExporter @Inject constructor(
 
       file.writeText(sb.toString())
       file
-    }
+    } }
 
   suspend fun exportPdf(): File =
-    withContext(Dispatchers.IO) {
+    withContext(Dispatchers.IO) { reportMutex.withLock {
       val dir = getReportsDir()
       val file = File(dir, "netra_battery_report_${fileStampFormatter.format(Date())}.pdf")
       val snapshots = historyRepository.getSnapshotsSince(System.currentTimeMillis() - 24L * 3600_000L)
@@ -266,7 +264,12 @@ class LocalReportExporter @Inject constructor(
       }
       document.close()
       file
-    }
+    } }
+
+  private fun csvText(value: String): String {
+    val safe = if (value.trimStart().firstOrNull() in listOf('=', '+', '-', '@')) "'" + value else value
+    return "\"" + safe.replace("\"", "\"\"") + "\""
+  }
 
   private fun getReportsDir(): File {
     val base = context.filesDir

@@ -125,10 +125,10 @@ class ThermalMonitor @Inject constructor(
       wakeupsThisHour = 0,
       snapshotsToday = 0,
     )
-    val zone = temperatureEngine.classifyZone(telemetry.temperatureCelsius, sensitivity)
+    val zone = temperatureEngine.classifyObserved(telemetry)
 
     // Hysteresis reset once battery cools comfortably below 38.0°C
-    if (telemetry.temperatureCelsius < 38.0f && zone.ordinal <= TemperatureZone.NORMAL.ordinal) {
+    if (zone == TemperatureZone.UNAVAILABLE) {
       lastAlertZone = null
     }
 
@@ -153,14 +153,14 @@ class ThermalMonitor @Inject constructor(
     var alerts = _state.value.alertCount
 
     if (meetsTierThreshold && (escalatedZone || cooldownElapsed)) {
-      val formattedTemp = String.format(Locale.US, "%.1f", telemetry.temperatureCelsius)
+      val formattedTemp = com.example.domain.model.telemetryText(telemetry.temperatureCelsius, "°C")
       when (zone) {
         TemperatureZone.EMERGENCY, TemperatureZone.CRITICAL -> {
-          val title = "Critical Battery Heat ($formattedTemp°C)"
+          val title = "Critical Battery Heat ($formattedTemp)"
           val body = if (telemetry.isPlugged) {
-            "Battery reached $formattedTemp°C (${powerBudget.activeTier.name} tier). Unplug charger and let device cool."
+            "Battery reached $formattedTemp (${powerBudget.activeTier.name} tier). Unplug charger and let device cool."
           } else {
-            "Battery reached $formattedTemp°C (${powerBudget.activeTier.name} tier). Pause heavy apps and let device cool."
+            "Battery reached $formattedTemp (${powerBudget.activeTier.name} tier). Pause heavy apps and let device cool."
           }
           notificationHelper.postCriticalAlert(NotificationHelper.ID_THERMAL_ALERT, title, body)
           notifiedTitle = title
@@ -170,8 +170,8 @@ class ThermalMonitor @Inject constructor(
           lastAlertTimestampMillis = now
         }
         TemperatureZone.VERY_HOT, TemperatureZone.HOT -> {
-          val title = "High Battery Temperature ($formattedTemp°C)"
-          val body = "Thermal warning in ${powerBudget.activeTier.name} tier: battery at $formattedTemp°C. Thermal throttling active to protect battery health."
+          val title = "High Battery Temperature ($formattedTemp)"
+          val body = "Thermal warning in ${powerBudget.activeTier.name} tier: battery at $formattedTemp. Android reported thermal stress. Netra can reduce its own work, not control CPU throttling."
           notificationHelper.postAdvisory(NotificationHelper.ID_THERMAL_ALERT, title, body)
           notifiedTitle = title
           notifiedTime = now

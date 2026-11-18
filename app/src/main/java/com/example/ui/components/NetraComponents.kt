@@ -101,8 +101,6 @@ fun AnimatedBatteryRing(
   val ringColor =
     when {
       levelPercent !in 0..100 -> Color.Gray
-      temperatureCelsius >= 43f -> SemanticCriticalRed
-      temperatureCelsius >= 40f -> SemanticHotOrange
       levelPercent <= 15 -> SemanticCriticalRed
       isCharging -> SemanticCoolMint
       levelPercent <= 30 -> SemanticWarmAmber

@@ -64,7 +64,7 @@ class AutomationRulesEngine @Inject constructor(
     temperatureEngine.recordTemperature(telemetry.timestampMillis, telemetry.temperatureCelsius)
 
     val chargingDiagnosis: ChargingDiagnosis = chargingClassifier.diagnose(telemetry)
-    val zone = temperatureEngine.classifyZone(telemetry.temperatureCelsius, prefs.coolingSensitivity)
+    val zone = temperatureEngine.classifyObserved(telemetry)
 
     // 1. Charger connect / disconnect rules
     val prevPlugged = lastPluggedState
