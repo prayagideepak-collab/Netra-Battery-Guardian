@@ -175,35 +175,19 @@ fun calculateHardwarePower(
   }
 
   val volts = voltageMv / 1000f
-  val amps = validatedCurrent.magnitudeMa / 1000f
+  val amps = validatedCurrent.rawCurrentMa / 1000f
   val watts = volts * amps
   val wattsText = String.format(Locale.US, "%.2f W", watts)
   val formulaText = String.format(
     Locale.US,
     "%.2f V × %.0f mA = %.2f W",
     volts,
-    validatedCurrent.magnitudeMa,
+    validatedCurrent.rawCurrentMa,
     watts,
   )
 
-  val (speedEn, speedHi) = if (!isCharging) {
-    "Discharging (Not Charging)" to "डिस्चार्ज हो रहा है"
-  } else {
-    when (diagnosis?.speedClass) {
-      ChargingSpeedClass.SLOW -> "Slow" to "धीमा (Slow)"
-      ChargingSpeedClass.STANDARD -> "Normal" to "सामान्य (Normal)"
-      ChargingSpeedClass.FAST -> "Fast" to "तेज़ (Fast)"
-      ChargingSpeedClass.SUPER_FAST,
-      ChargingSpeedClass.ULTRA_FAST,
-      ChargingSpeedClass.EXTREME_FAST -> "Ultra Fast" to "अल्ट्रा फास्ट (Ultra Fast)"
-      else -> when {
-        watts < 7.5f -> "Slow" to "धीमा (Slow)"
-        watts < 15.0f -> "Normal" to "सामान्य (Normal)"
-        watts < 27.0f -> "Fast" to "तेज़ (Fast)"
-        else -> "Ultra Fast" to "अल्ट्रा फास्ट (Ultra Fast)"
-      }
-    }
-  }
+  val speedEn = diagnosis?.speedClass?.takeIf { it != ChargingSpeedClass.UNAVAILABLE }?.name?.replace('_', ' ') ?: ""
+  val speedHi = speedEn
 
   return if (isCharging) {
     ValidatedPowerReading(
@@ -306,10 +290,9 @@ fun BatteryMonitoringDashboardView(
       .sortedBy { it.timestampMillis }
       .map { it.currentMa }
       .filter { it.isFinite() }
-      .map { abs(it) }
       .toMutableList()
     if (validatedCurrent.isAvailable && validatedCurrent.magnitudeMa.isFinite()) {
-      list.add(validatedCurrent.magnitudeMa)
+      list.add(validatedCurrent.rawCurrentMa)
     }
     list
   }
@@ -665,15 +648,11 @@ fun BatteryMonitoringDashboardView(
       }
 
       SentinelSpecRow(
-        label = if (isHindi) "चार्जिंग करंट (Incoming)" else "Charging Current (Incoming)",
+        label = if (isHindi) "संकेत सहित सेंसर करंट" else "Signed Battery Current",
         value = validatedCurrent.chargingCurrentText,
         valueTag = "sentinel_charging_current_value",
       )
-      SentinelSpecRow(
-        label = if (isHindi) "डिस्चार्ज करंट (Outgoing)" else "Discharging Current (Outgoing)",
-        value = validatedCurrent.dischargingCurrentText,
-        valueTag = "sentinel_discharging_current_value",
-      )
+
       Text(
         text = if (isHindi) validatedCurrent.polarityNoteHi else validatedCurrent.polarityNoteEn,
         style = MaterialTheme.typography.labelSmall,
@@ -727,7 +706,7 @@ fun BatteryMonitoringDashboardView(
         verticalArrangement = Arrangement.spacedBy(10.dp),
       ) {
         SentinelMetricBox(
-          title = if (isHindi) "चार्जिंग पावर (W)" else "Charging Power (W)",
+          title = if (isHindi) "बैटरी सेंसर पावर (W)" else "Battery Sensor Power (W)",
           value = validatedPower.chargingPowerText,
           accent = SemanticCoolMint,
           modifier = Modifier
@@ -735,7 +714,7 @@ fun BatteryMonitoringDashboardView(
             .testTag("sentinel_charging_power_value"),
         )
         SentinelMetricBox(
-          title = if (isHindi) "डिस्चार्ज पावर (W)" else "Discharging Power (W)",
+          title = if (isHindi) "बैटरी सेंसर पावर (W)" else "Battery Sensor Power (W)",
           value = validatedPower.dischargingPowerText,
           accent = SemanticWarmAmber,
           modifier = Modifier

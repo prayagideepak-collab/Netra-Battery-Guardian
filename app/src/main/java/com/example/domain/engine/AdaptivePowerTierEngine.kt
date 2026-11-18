@@ -59,7 +59,7 @@ class AdaptivePowerTierEngine @Inject constructor() {
       telemetry.thermalLevel.ordinal >= ThermalLevel.MODERATE.ordinal ||
         telemetry.healthState == com.example.domain.model.BatteryHealthState.OVERHEAT
     val thermalClearNow =
-      telemetry.thermalLevel.ordinal < ThermalLevel.MODERATE.ordinal &&
+      telemetry.thermalLevel == ThermalLevel.NONE &&
         telemetry.healthState != com.example.domain.model.BatteryHealthState.OVERHEAT
 
     if (thermalHotNow) thermalLatched = true

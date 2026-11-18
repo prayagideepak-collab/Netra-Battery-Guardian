@@ -163,7 +163,7 @@ class BatterySentinelDashboardAndWidgetTest {
       .performScrollTo()
       .assertIsDisplayed()
     composeTestRule.onNodeWithTag("sentinel_power_speed_value")
-      .assertTextContains("Fast", substring = true)
+      .assertTextContains("FAST", substring = true)
     composeTestRule.onNodeWithTag("sentinel_power_formula_value")
       .assertTextContains("10.50 W", substring = true)
 
