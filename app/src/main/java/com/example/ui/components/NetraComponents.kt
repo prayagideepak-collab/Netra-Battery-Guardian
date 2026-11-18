@@ -100,6 +100,7 @@ fun AnimatedBatteryRing(
 
   val ringColor =
     when {
+      levelPercent !in 0..100 -> Color.Gray
       temperatureCelsius >= 43f -> SemanticCriticalRed
       temperatureCelsius >= 40f -> SemanticHotOrange
       levelPercent <= 15 -> SemanticCriticalRed
@@ -155,7 +156,9 @@ fun AnimatedBatteryRing(
       }
       Text(
         text = if (levelPercent in 0..100) "$levelPercent%" else "Unavailable",
-        style = MaterialTheme.typography.displayLarge,
+        style = if (levelPercent in 0..100) MaterialTheme.typography.displayLarge else MaterialTheme.typography.titleLarge,
+        maxLines = 1,
+        softWrap = false,
         color = MaterialTheme.colorScheme.onSurface,
       )
       Text(

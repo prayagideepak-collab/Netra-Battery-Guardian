@@ -147,7 +147,7 @@ fun HomeScreen(
             isCharging = t.isCharging,
             temperatureCelsius = t.temperatureCelsius,
             animateRing = animateRing,
-            statusLabel = if (t.isCharging) strings.charging else strings.discharging,
+            statusLabel = if (!t.hasLevel) "Unavailable" else if (t.isCharging) strings.charging else strings.discharging,
           )
 
           if (diag != null) {
@@ -190,7 +190,7 @@ fun HomeScreen(
           )
           TelemetryMiniStat(
             label = strings.voltage,
-            value = "${telemetryText(t.voltageVolts, "", 2)} V",
+            value = telemetryText(t.voltageVolts, " V", 2),
             modifier = Modifier.weight(1f),
           )
           TelemetryMiniStat(
@@ -419,7 +419,9 @@ private fun TelemetryMiniStat(
     )
     Text(
       text = value,
-      style = TelemetryMonoStyle,
+      style = if (value == "Unavailable") MaterialTheme.typography.labelSmall else TelemetryMonoStyle,
+      maxLines = 1,
+      softWrap = false,
       color = MaterialTheme.colorScheme.onSurface,
     )
   }

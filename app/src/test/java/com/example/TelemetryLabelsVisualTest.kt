@@ -24,12 +24,12 @@ class TelemetryLabelsVisualTest {
   @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
   @Test fun unavailableLabelsDoNotShowInventedReadings() {
     val t = BatteryTelemetry()
-    rule.setContent { NetraBatteryTheme { HomeScreen(
+    rule.setContent { NetraBatteryTheme { androidx.compose.material3.Surface { HomeScreen(
       state = NetraUiState(telemetry = t, chargingDiagnosis = ChargingSpeedClassifier().diagnose(t)),
       strings = AppStrings(AppLanguage.ENGLISH), onRefresh = {}, onToggleBatterySaver = {},
       onToggleCooling = {}, onToggleLocationSaver = {}, onToggleNightSilent = {},
       onOpenStorageTab = {}, onOpenBatteryTab = {}, onOpenHeatTab = {}, onOpenAppsTab = {},
-    ) } }
+    ) } } }
     rule.waitForIdle()
     rule.onAllNodesWithText("Unavailable", substring = true).fetchSemanticsNodes().also { check(it.isNotEmpty()) }
     rule.onAllNodesWithText("1100", substring = true).assertCountEquals(0)

@@ -31,6 +31,7 @@ class ChargingSpeedClassifier @Inject constructor() {
     val avgCurrent = if (telemetry.hasPower && powerWindow.isNotEmpty()) powerWindow.map { it.currentMa }.average().toFloat() else Float.NaN
     val power = if (telemetry.hasPower && powerWindow.isNotEmpty()) powerWindow.map { it.instantaneousPowerWatts }.average().toFloat() else Float.NaN
     val speed = when {
+      !telemetry.hasLevel -> ChargingSpeedClass.UNAVAILABLE
       !telemetry.isPlugged -> ChargingSpeedClass.NOT_CHARGING
       !power.isFinite() -> ChargingSpeedClass.UNAVAILABLE
       power < 0 -> ChargingSpeedClass.DISCHARGING_WHILE_PLUGGED
