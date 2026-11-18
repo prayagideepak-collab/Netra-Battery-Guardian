@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
-import android.os.Environment
 import com.example.data.repository.BatteryHistoryRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -146,7 +145,7 @@ class LocalReportExporter @Inject constructor(
     }
 
   private fun getReportsDir(): File {
-    val base = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS) ?: context.filesDir
+    val base = context.filesDir
     val dir = File(base, "NetraReports")
     if (!dir.exists()) dir.mkdirs()
     return dir
