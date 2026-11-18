@@ -35,6 +35,8 @@ class CoolingConsentVisualTest {
     rule.waitForIdle()
     rule.onNodeWithTag("cooling_brightness_consent").performScrollTo().assertIsOff()
     rule.onNodeWithText("OFF by default", substring = true).assertExists()
+    rule.onNodeWithText("Heat safety cannot be confirmed", substring = true).assertExists()
+    rule.onAllNodesWithText("within safe bounds", substring = true).assertCountEquals(0)
     rule.runOnIdle {
       val view = rule.activity.window.decorView
       val bitmap = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)

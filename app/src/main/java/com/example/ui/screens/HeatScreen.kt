@@ -73,12 +73,13 @@ fun HeatScreen(
           ) {
             Text(
               text = "${telemetryText(t.temperatureCelsius, "°C", 1)}",
-              style = MaterialTheme.typography.displayLarge,
+              style = if (t.hasTemperature) MaterialTheme.typography.displayLarge else MaterialTheme.typography.titleLarge,
+              modifier = Modifier.weight(1f),
               color = zColor,
             )
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
               StatusPill(strings.zoneLabel(report.zone), zColor)
-              StatusPill("OS Thermal: ${strings.thermalLabel(t.thermalLevel)}", MaterialTheme.colorScheme.secondary)
+              StatusPill("OS: ${strings.thermalLabel(t.thermalLevel)}", MaterialTheme.colorScheme.secondary)
             }
           }
 
@@ -87,7 +88,7 @@ fun HeatScreen(
             style = MaterialTheme.typography.titleMedium,
           )
           Text(
-            text = "5-min Trend: ${telemetryText(report.trend.deltaPerMinute, decimals = 2)} °C/min",
+            text = "5-min Trend: ${telemetryText(report.trend.deltaPerMinute, " °C/min", 2)}",
             style = TelemetryMonoStyle,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
@@ -179,8 +180,11 @@ fun HeatScreen(
 
           if (report.causes.isEmpty()) {
             Text(
-              text = if (strings.isHindi) "अभी कोई असामान्य गर्मी स्रोत नहीं मिला। तापमान सामान्य सीमा में है।"
-              else "No active overheating causes detected. Device temperature is within safe bounds.",
+              text = if (!t.hasTemperature) {
+                if (strings.isHindi) "Unavailable: तापमान उपलब्ध नहीं है। गर्मी की स्थिति की पुष्टि नहीं हो सकती।"
+                else "Unavailable: temperature was not reported. Heat safety cannot be confirmed."
+              } else if (strings.isHindi) "अभी कोई असामान्य गर्मी स्रोत नहीं मिला। यह तापमान सुरक्षा की गारंटी नहीं है।"
+              else "No active overheating causes identified. This does not certify a safe temperature.",
               style = MaterialTheme.typography.bodyLarge,
               color = SemanticCoolMint,
             )
