@@ -294,11 +294,11 @@ class AutomationRulesEngine @Inject constructor(
     }
     lastProfile = activeProfile
 
-    // 6. Screen-off baseline tracking
-    if (lastScreenOnState != null && lastScreenOnState != telemetry.screenOn) {
-      if (!telemetry.screenOn) {
-        preferencesRepository.setScreenOffBaseline(telemetry.levelPercent, now)
-      }
+    // 6. Seed only from a real unplugged screen-off observation. Retry after a missing sample.
+    if (telemetry.screenOn || telemetry.isPlugged) {
+      if (prefs.lastScreenOffLevel >= 0) preferencesRepository.setScreenOffBaseline(-1, 0L)
+    } else if (shouldSeedScreenOffBaseline(telemetry, prefs.lastScreenOffLevel, lastScreenOnState)) {
+      preferencesRepository.setScreenOffBaseline(telemetry.levelPercent, now)
     }
     lastScreenOnState = telemetry.screenOn
 
@@ -338,3 +338,6 @@ class AutomationRulesEngine @Inject constructor(
     )
   }
 }
+
+internal fun shouldSeedScreenOffBaseline(telemetry: BatteryTelemetry, baselineLevel: Int, previousScreenOn: Boolean?): Boolean =
+  telemetry.hasLevel && !telemetry.screenOn && !telemetry.isPlugged && (baselineLevel !in 0..100 || previousScreenOn == true)
