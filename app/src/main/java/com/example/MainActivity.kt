@@ -146,6 +146,12 @@ private fun NetraRootScaffold(
   viewModel: MainViewModel,
   strings: AppStrings,
 ) {
+  val csvSave = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+    viewModel.exportCsvReport(uri)
+  }
+  val pdfSave = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+    viewModel.exportPdfReport(uri)
+  }
   val state by viewModel.uiState.collectAsStateWithLifecycle()
   val navController = rememberNavController()
   val backStackEntry by navController.currentBackStackEntryAsState()
@@ -322,8 +328,8 @@ private fun NetraRootScaffold(
               onSetDataRetentionDays = viewModel::setDataRetentionDays,
               onSetLiveGuardianService = viewModel::setLiveGuardianService,
               onTestVoice = viewModel::testVoiceAnnouncement,
-              onExportCsv = viewModel::exportCsvReport,
-              onExportPdf = viewModel::exportPdfReport,
+              onExportCsv = { csvSave.launch("netra_battery_report.csv") },
+              onExportPdf = { pdfSave.launch("netra_battery_report.pdf") },
               onClearAllData = viewModel::clearAllLocalData,
             )
           }

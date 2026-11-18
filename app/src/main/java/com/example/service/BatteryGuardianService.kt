@@ -144,7 +144,11 @@ class BatteryGuardianService : Service() {
         }
       val notif = notificationHelper.buildGuardianForegroundNotification("Netra Guardian", statusLine)
       val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
-      nm?.notify(NotificationHelper.ID_GUARDIAN_SERVICE, notif)
+      try {
+        nm?.notify(NotificationHelper.ID_GUARDIAN_SERVICE, notif)
+      } catch (_: SecurityException) {
+        // Notifications may be denied/revoked; keep monitoring state local.
+      }
     }
   }
 

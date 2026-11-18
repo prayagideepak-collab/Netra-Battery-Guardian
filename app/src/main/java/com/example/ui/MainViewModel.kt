@@ -545,17 +545,26 @@ class MainViewModel @Inject constructor(
     voiceAssistant.testVoice(_uiState.value.prefs)
   }
 
-  fun exportCsvReport() {
-    viewModelScope.launch {
-      val file = reportExporter.exportCsv()
-      _uiState.update { it.copy(statusMessage = "CSV saved locally: ${file.name}") }
-    }
-  }
+  fun exportCsvReport(destination: android.net.Uri?) = saveReport(destination, false)
 
-  fun exportPdfReport() {
+  fun exportPdfReport(destination: android.net.Uri?) = saveReport(destination, true)
+
+  private fun saveReport(destination: android.net.Uri?, pdf: Boolean) {
+    if (destination == null) return // User cancelled; no report is created or shared.
     viewModelScope.launch {
-      val file = reportExporter.exportPdf()
-      _uiState.update { it.copy(statusMessage = "PDF saved locally: ${file.name}") }
+      val saved = runCatching {
+        withContext(Dispatchers.IO) {
+          val file = if (pdf) reportExporter.exportPdf() else reportExporter.exportCsv()
+          try {
+            val stream = getApplication<Application>().contentResolver.openOutputStream(destination, "wt")
+              ?: error("Destination unavailable")
+            stream.use { output -> file.inputStream().use { it.copyTo(output) } }
+          } finally {
+            file.delete()
+          }
+        }
+      }.isSuccess
+      _uiState.update { it.copy(statusMessage = if (saved) "Report saved to your chosen destination." else "Report could not be saved. Please choose a destination again.") }
     }
   }
 

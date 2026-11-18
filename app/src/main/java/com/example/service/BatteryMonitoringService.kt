@@ -252,7 +252,11 @@ class BatteryMonitoringService : Service() {
         }V • $chargingStatusLabel"
       val notification = notificationHelper.buildGuardianForegroundNotification("Netra Battery Monitor", statusSummary)
       val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-      nm?.notify(NotificationHelper.ID_GUARDIAN_SERVICE, notification)
+      try {
+        nm?.notify(NotificationHelper.ID_GUARDIAN_SERVICE, notification)
+      } catch (_: SecurityException) {
+        // Notifications may be denied/revoked; keep monitoring state local.
+      }
     }
   }
 
