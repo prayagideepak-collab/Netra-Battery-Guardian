@@ -19,15 +19,19 @@ import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "w390dp-h844dp-xhdpi", sdk = [36], application = Application::class)
+@Config(qualifiers = "w390dp-h1400dp-xhdpi", sdk = [36], application = Application::class)
 class CoolingConsentVisualTest {
   @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
   @Test fun coolingControlStartsOffAndShowsRestoreTerms() {
     val t = BatteryTelemetry()
-    rule.setContent { NetraBatteryTheme { HeatScreen(
-      state = NetraUiState(telemetry = t), strings = AppStrings(AppLanguage.ENGLISH),
+    rule.setContent { NetraBatteryTheme { androidx.compose.material3.Surface { HeatScreen(
+      state = NetraUiState(telemetry = t, heatReport = HeatDiagnosisReport(
+        zone = TemperatureZone.UNAVAILABLE, trend = TemperatureTrendResult(Float.NaN, TrendStatus.UNAVAILABLE, "Unavailable", "Unavailable"),
+        confidence = ConfidenceLevel.LOW, causes = emptyList(), recommendedActionsEn = emptyList(), recommendedActionsHi = emptyList(),
+        coolingWorkflowActive = false, coolingStepsAppliedEn = emptyList(), coolingStepsAppliedHi = emptyList(),
+      )), strings = AppStrings(AppLanguage.ENGLISH),
       onToggleCoolingMode = {}, onOpenWriteSettings = {},
-    ) } }
+    ) } } }
     rule.waitForIdle()
     rule.onNodeWithTag("cooling_brightness_consent").performScrollTo().assertIsOff()
     rule.onNodeWithText("OFF by default", substring = true).assertExists()
