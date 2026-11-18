@@ -14,6 +14,7 @@ data class ChargingSessionEntity(
   val endTimeMillis: Long? = null,
   val startLevel: Int,
   val endLevel: Int,
+  val percentageGained: Int = (endLevel - startLevel).coerceAtLeast(0),
   val peakTempCelsius: Float,
   val avgPowerWatts: Float,
   val maxPowerWatts: Float,

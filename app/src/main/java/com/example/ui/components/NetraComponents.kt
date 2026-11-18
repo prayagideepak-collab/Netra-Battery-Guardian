@@ -321,7 +321,7 @@ fun StatusPill(
   modifier: Modifier = Modifier,
 ) {
   Surface(
-    modifier = modifier,
+    modifier = modifier.semantics(mergeDescendants = true) {},
     shape = RoundedCornerShape(999.dp),
     color = color.copy(alpha = 0.16f),
     border = BorderStroke(1.dp, color.copy(alpha = 0.4f)),

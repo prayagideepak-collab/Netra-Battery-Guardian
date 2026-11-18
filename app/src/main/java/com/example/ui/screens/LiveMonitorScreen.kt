@@ -54,9 +54,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.local.db.BatterySnapshot
+import com.example.data.local.system.BatteryTelemetryCollector
+import com.example.domain.model.BatteryTelemetry
+import com.example.domain.model.ChargingDiagnosis
+import com.example.domain.model.PlugType
 import com.example.service.BatteryMonitoringService
 import com.example.service.BatteryServiceState
 import com.example.ui.components.AnimatedBatteryRing
+import com.example.ui.components.BatteryMonitoringDashboardView
 import com.example.ui.components.GuardianCard
 import com.example.ui.components.StatusPill
 import com.example.ui.components.WhyExplainChip
@@ -73,7 +78,8 @@ import java.util.Locale
 
 /**
  * Material 3 screen that observes [BatteryMonitoringService.serviceState] in real time
- * and displays live battery percentage, temperature, charging status, and idle Room persistence.
+ * and displays live battery percentage, temperature, charging status, and the dedicated
+ * Battery Sentinel Pro monitoring dashboard.
  */
 @Composable
 fun LiveMonitorScreen(
@@ -82,9 +88,19 @@ fun LiveMonitorScreen(
   onNavigateBack: () -> Unit,
   onOpenBatteryHistory: () -> Unit,
   modifier: Modifier = Modifier,
+  telemetry: BatteryTelemetry? = null,
+  chargingDiagnosis: ChargingDiagnosis? = null,
+  historySnapshots: List<BatterySnapshot> = emptyList(),
 ) {
   val context = LocalContext.current
   val serviceState by BatteryMonitoringService.serviceState.collectAsStateWithLifecycle()
+  val resolvedTelemetry: BatteryTelemetry? = remember(telemetry, serviceState) {
+    telemetry ?: try {
+      BatteryTelemetryCollector(context).collect(isAppInForeground = true)
+    } catch (_: Throwable) {
+      null
+    }
+  }
 
   LiveMonitorContent(
     serviceState = serviceState,
@@ -100,6 +116,9 @@ fun LiveMonitorScreen(
     onNavigateBack = onNavigateBack,
     onOpenBatteryHistory = onOpenBatteryHistory,
     modifier = modifier,
+    telemetry = resolvedTelemetry,
+    chargingDiagnosis = chargingDiagnosis,
+    historySnapshots = historySnapshots,
   )
 }
 
@@ -113,6 +132,9 @@ fun LiveMonitorContent(
   onNavigateBack: () -> Unit,
   onOpenBatteryHistory: () -> Unit,
   modifier: Modifier = Modifier,
+  telemetry: BatteryTelemetry? = null,
+  chargingDiagnosis: ChargingDiagnosis? = null,
+  historySnapshots: List<BatterySnapshot> = emptyList(),
 ) {
   val timeFormat = remember { SimpleDateFormat("dd MMM HH:mm:ss", Locale.getDefault()) }
   val tempColor =
@@ -472,6 +494,44 @@ fun LiveMonitorContent(
             }
           }
         }
+      }
+
+      // 4. Dedicated Battery Sentinel Pro Monitoring Dashboard View
+      item {
+        val effectiveTelemetry = remember(telemetry, serviceState) {
+          if (telemetry != null && telemetry.hasLevel) {
+            telemetry
+          } else {
+            BatteryTelemetry(
+              timestampMillis = serviceState.lastUpdatedMillis.takeIf { it > 0L } ?: System.currentTimeMillis(),
+              levelPercent = serviceState.levelPercent,
+              isCharging = serviceState.isCharging,
+              isPlugged = serviceState.isPlugged,
+              plugType = runCatching { PlugType.valueOf(serviceState.plugType) }.getOrDefault(PlugType.NONE),
+              temperatureCelsius = serviceState.temperatureCelsius,
+              voltageMv = serviceState.voltageMv,
+              currentMa = serviceState.currentMa,
+              estimatedCapacityMah = telemetry?.estimatedCapacityMah ?: -1,
+              healthState = telemetry?.healthState ?: com.example.domain.model.BatteryHealthState.UNKNOWN,
+              technology = telemetry?.technology ?: "Unavailable",
+            )
+          }
+        }
+        val effectiveHistory = remember(historySnapshots, latestHourlySnapshot) {
+          if (historySnapshots.isNotEmpty()) {
+            historySnapshots
+          } else if (latestHourlySnapshot != null) {
+            listOf(latestHourlySnapshot)
+          } else {
+            emptyList()
+          }
+        }
+        BatteryMonitoringDashboardView(
+          telemetry = effectiveTelemetry,
+          chargingDiagnosis = chargingDiagnosis,
+          historySnapshots = effectiveHistory,
+          isHindi = strings.isHindi,
+        )
       }
     }
   }

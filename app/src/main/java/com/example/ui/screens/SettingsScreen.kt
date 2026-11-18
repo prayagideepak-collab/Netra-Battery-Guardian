@@ -69,6 +69,7 @@ fun SettingsScreen(
   onExportCsv: () -> Unit,
   onExportPdf: () -> Unit,
   onClearAllData: () -> Unit,
+  onQueueChargingCsvExport: () -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   val p = state.prefs
@@ -263,8 +264,19 @@ fun SettingsScreen(
           OutlinedButton(onClick = { showActivityLogDialog = true }, modifier = Modifier.testTag("open_activity_log_button")) {
             Text(if (strings.isHindi) "गतिविधि लॉग (${state.activityLogs.size})" else "Activity Log (${state.activityLogs.size})")
           }
-          OutlinedButton(onClick = onExportCsv, modifier = Modifier.testTag("export_csv_button")) {
-            Text("Export CSV")
+          OutlinedButton(
+            onClick = onExportCsv,
+            modifier = Modifier.testTag("export_csv_button"),
+          ) {
+            Text(if (state.telemetry.isCharging) "Export Health & Temp CSV" else "Export CSV (Charging Only)")
+          }
+          if (!state.telemetry.isCharging) {
+            OutlinedButton(
+              onClick = onQueueChargingCsvExport,
+              modifier = Modifier.testTag("settings_queue_csv_button"),
+            ) {
+              Text("Queue CSV for Charge")
+            }
           }
           OutlinedButton(onClick = onExportPdf, modifier = Modifier.testTag("export_pdf_button")) {
             Text("Export PDF")

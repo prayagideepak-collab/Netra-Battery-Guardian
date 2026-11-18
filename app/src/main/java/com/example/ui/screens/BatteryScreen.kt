@@ -28,9 +28,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import com.example.domain.engine.OptimizationPriority
+import com.example.domain.engine.OptimizerActionTarget
 import com.example.domain.engine.PowerGovernanceRegistry
 import com.example.domain.model.AdaptivePowerTier
 import com.example.ui.NetraUiState
+import com.example.ui.components.BatteryMonitoringDashboardView
+import com.example.ui.components.BatteryTemperatureTrendChart
+import com.example.ui.components.DozeEfficiencyCard
 import com.example.ui.components.GuardianCard
 import com.example.ui.components.HourlyTempVoltageChart
 import com.example.ui.components.StatusPill
@@ -50,6 +55,9 @@ fun BatteryScreen(
   state: NetraUiState,
   strings: AppStrings,
   onOpenLiveMonitor: () -> Unit = {},
+  onOptimizerAction: (OptimizerActionTarget, String?) -> Unit = { _, _ -> },
+  onExportCsv: () -> Unit = {},
+  onQueueChargingCsvExport: () -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   var show7Days by remember { mutableStateOf(false) }
@@ -60,7 +68,7 @@ fun BatteryScreen(
   val diag = state.chargingDiagnosis
 
   LazyColumn(
-    modifier = modifier.fillMaxSize(),
+    modifier = modifier.fillMaxSize().testTag("battery_screen_list"),
     contentPadding = PaddingValues(16.dp),
     verticalArrangement = Arrangement.spacedBy(14.dp),
     horizontalAlignment = Alignment.CenterHorizontally,
@@ -83,6 +91,16 @@ fun BatteryScreen(
           Text(strings.liveServiceAction)
         }
       }
+    }
+
+    // Dedicated Battery Sentinel Pro Monitoring Dashboard View
+    item {
+      BatteryMonitoringDashboardView(
+        telemetry = t,
+        chargingDiagnosis = diag,
+        historySnapshots = if (state.snapshots24h.isNotEmpty()) state.snapshots24h else state.hourlySnapshots,
+        isHindi = strings.isHindi,
+      )
     }
 
     // Net Charging Power Classification Card
@@ -166,12 +184,6 @@ fun BatteryScreen(
           modifier = Modifier.testTag("doze_guard_status_pill"),
         )
         Text(
-          text = "Doze Mode: ${if (state.dozeState.isInDozeMode) "IN DOZE (Non-essential paused)" else "ACTIVE"} • Transitions In/Out: ${state.dozeState.enterDozeCount}/${state.dozeState.exitDozeCount}",
-          style = TelemetryMonoStyle,
-          color = if (state.dozeState.isInDozeMode) SemanticWarmAmber else MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.testTag("doze_guard_status_pill"),
-        )
-        Text(
           text = "Self-Healing: ${sh.lastCheckSummary} (Retries ${sh.consecutiveFailures}/${sh.maxRetries}, Circuit ${if (sh.circuitOpen) "OPEN" else "CLOSED"}) • Log: ${sh.rotatedLogBytes / 1024} KB / 256 KB",
           style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -185,48 +197,13 @@ fun BatteryScreen(
       }
     }
 
-    // Long-Term Battery Cycle Count & Capacity Degradation (Logged Daily While Charging)
+    // Doze Mode Total Time & Energy-Saving Efficiency Card
     item {
-      val latestHealth = state.batteryHealthLogs.firstOrNull { it.sourceLabel.startsWith("OBSERVED_V2") }
-      val cycles = t.chargeCycleCount?.toFloat() ?: latestHealth?.estimatedCycleCount ?: -1f
-      val cyclesText = if (cycles >= 0) cycles.toInt().toString() else "Unavailable"
-      val estMah = t.estimatedCapacityMah
-      val designText = "Unavailable"
-      val degText = "Unavailable"
-      val healthText = "Unavailable"
-
-      GuardianCard(modifier = Modifier.widthIn(max = 720.dp).testTag("battery_cycle_health_card")) {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically,
-        ) {
-          Text(
-            text = if (strings.isHindi) "बैटरी चक्र और क्षमता क्षरण" else "Battery Cycles & Degradation",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.weight(1f),
-          )
-          StatusPill(
-            text = "$healthText Health",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
-        }
-        Text(
-          text = "OS Cycles: $cyclesText • Capacity: ${capacityText(estMah)} • Design: $designText • Wear: $degText",
-          style = TelemetryMonoStyle,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-          text = if (latestHealth != null) {
-            "Observed OS cycles/counter only. Design capacity, wear and health: Unavailable."
-          } else {
-            if (strings.isHindi) "चार्जिंग के दौरान प्रतिदिन एक बार चक्र और क्षमता लॉग की जाती है।"
-            else "Design capacity, wear and health are unavailable without a verified baseline."
-          },
-          style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-      }
+      DozeEfficiencyCard(
+        metrics = state.dozeEfficiency,
+        isHindi = strings.isHindi,
+        whyLabel = strings.whyButton,
+      )
     }
 
     // Long-Term Battery Cycle Count & Capacity Degradation (Logged Daily While Charging)
@@ -270,6 +247,88 @@ fun BatteryScreen(
           style = MaterialTheme.typography.bodyMedium,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          FilledTonalButton(
+            onClick = onExportCsv,
+            enabled = t.isCharging,
+            modifier = Modifier.testTag("battery_export_csv_button"),
+          ) {
+            Text(
+              if (strings.isHindi) "CSV निर्यात (चार्जिंग पर)"
+              else "Export Health & Temp CSV",
+            )
+          }
+          if (!t.isCharging) {
+            OutlinedButton(
+              onClick = onQueueChargingCsvExport,
+              modifier = Modifier.testTag("queue_charging_csv_button"),
+            ) {
+              Text(if (strings.isHindi) "चार्जिंग पर कतारबद्ध करें" else "Queue on Charge")
+            }
+          }
+        }
+      }
+    }
+
+    // Battery Health Optimizer (Actionable Low-Power Advice)
+    item {
+      val opt = state.optimizationReport
+      GuardianCard(modifier = Modifier.widthIn(max = 720.dp).testTag("battery_health_optimizer_card")) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text(
+            text = if (strings.isHindi) "बैटरी स्वास्थ्य ऑप्टिमाइज़र" else "Battery Health Optimizer",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.weight(1f),
+          )
+          StatusPill(
+            text = "Score ${opt.healthScore}/100 • ${opt.powerTier.name}",
+            color = if (opt.healthScore >= 80) SemanticCoolMint else SemanticWarmAmber,
+          )
+        }
+        opt.recommendations.forEach { rec ->
+          Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Text(
+                text = if (strings.isHindi) rec.titleHi else rec.titleEn,
+                style = MaterialTheme.typography.titleSmall,
+                color = if (rec.priority == OptimizationPriority.URGENT || rec.priority == OptimizationPriority.HIGH) {
+                  SemanticWarmAmber
+                } else {
+                  MaterialTheme.colorScheme.onSurface
+                },
+                modifier = Modifier.weight(1f),
+              )
+              WhyExplainChip(
+                label = strings.whyButton,
+                title = if (strings.isHindi) rec.titleHi else rec.titleEn,
+                explanation = if (strings.isHindi) rec.whyHi else rec.whyEn,
+              )
+            }
+            Text(
+              text = if (strings.isHindi) rec.adviceHi else rec.adviceEn,
+              style = MaterialTheme.typography.bodyMedium,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(
+              onClick = { onOptimizerAction(rec.actionTarget, rec.packageHint) },
+              modifier = Modifier.testTag("optimizer_action_${rec.id}"),
+            ) {
+              Text(if (strings.isHindi) rec.actionLabelHi else rec.actionLabelEn)
+            }
+          }
+        }
       }
     }
 
@@ -318,6 +377,13 @@ fun BatteryScreen(
           maxRange = 55f,
           lineColor = SemanticWarmAmber,
           emptyMessage = if (strings.isHindi) "तापमान डेटा संकलित हो रहा है।" else "Collecting local thermal timeline.",
+        )
+
+        BatteryTemperatureTrendChart(
+          snapshots24h = state.snapshots24h,
+          snapshots7d = state.snapshots7d,
+          isHindi = strings.isHindi,
+          isLowPowerSurvival = state.powerBudget.activeTier == AdaptivePowerTier.SURVIVAL,
         )
       }
     }

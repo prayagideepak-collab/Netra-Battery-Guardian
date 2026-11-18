@@ -249,6 +249,7 @@ class BatteryMonitoringService : Service() {
         "${batteryLevelText(telemetry.levelPercent)} • ${telemetryText(telemetry.temperatureCelsius, "°C", 1)} • ${
           telemetryText(telemetry.voltageVolts, "", 2)
         }V • $chargingStatusLabel"
+      com.example.widget.BatteryThermalWidgetProvider.updateAllWidgets(applicationContext, intent)
       val notification = notificationHelper.buildGuardianForegroundNotification("Netra Battery Monitor", statusSummary)
       val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
       try {

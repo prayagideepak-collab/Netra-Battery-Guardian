@@ -42,6 +42,7 @@ import com.example.domain.model.GuardianProfile
 import com.example.domain.model.LocationSaverMode
 import com.example.ui.NetraUiState
 import com.example.ui.components.AnimatedBatteryRing
+import com.example.ui.components.DozeEfficiencyCard
 import com.example.ui.components.GuardianCard
 import com.example.ui.components.StatusPill
 import com.example.ui.components.TelemetryLineChart
@@ -315,6 +316,15 @@ fun HomeScreen(
           trackColor = SemanticIceCyan.copy(alpha = 0.35f),
         )
       }
+    }
+
+    // Doze Mode Efficiency Card
+    item {
+      DozeEfficiencyCard(
+        metrics = state.dozeEfficiency,
+        isHindi = strings.isHindi,
+        whyLabel = strings.whyButton,
+      )
     }
 
     // Thermal & Top Apps & Storage Quick Summaries

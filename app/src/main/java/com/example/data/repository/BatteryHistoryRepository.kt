@@ -21,6 +21,12 @@ class BatteryHistoryRepository @Inject constructor(
   private val dao: NetraDao,
   private val batteryDao: BatteryDao,
 ) {
+  constructor(
+    dao: NetraDao,
+    batteryDao: BatteryDao,
+    @Suppress("UNUSED_PARAMETER") chargingSessionDao: com.example.data.local.db.ChargingSessionDao,
+  ) : this(dao, batteryDao)
+
   private fun knownMax(a: Float, b: Float) = listOf(a, b).filter { it.isFinite() }.maxOrNull() ?: Float.NEGATIVE_INFINITY
   private fun knownMin(a: Float, b: Float) = listOf(a, b).filter { it.isFinite() }.minOrNull() ?: Float.NEGATIVE_INFINITY
 
@@ -43,6 +49,12 @@ class BatteryHistoryRepository @Inject constructor(
     dao.observeRecentDischargeSessions()
 
   fun observeActivityLogs(): Flow<List<ActivityLogEntity>> = dao.observeActivityLogs()
+
+  fun observeCriticalThermalEvents(): Flow<List<ActivityLogEntity>> =
+    dao.observeCriticalThermalEvents()
+
+  suspend fun getCriticalThermalEvents(): List<ActivityLogEntity> =
+    dao.getCriticalThermalEvents()
 
   fun observeBatteryHealthLogs(): Flow<List<BatteryHealthLogEntity>> = dao.observeBatteryHealthLogs()
 
@@ -215,6 +227,9 @@ class BatteryHistoryRepository @Inject constructor(
 
   suspend fun getDischargeSessionsForExport(): List<DischargeSessionEntity> =
     dao.getAllDischargeSessionsForExport()
+
+  suspend fun getBatteryHealthLogsForExport(): List<BatteryHealthLogEntity> =
+    dao.getAllBatteryHealthLogsForExport()
 
   suspend fun pruneOldData(retentionDays: Int) {
     val cutoff = System.currentTimeMillis() - retentionDays.toLong() * 24L * 3600_000L

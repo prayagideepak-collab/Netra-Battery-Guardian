@@ -265,6 +265,9 @@ private fun NetraRootScaffold(
               state = state,
               strings = strings,
               onOpenLiveMonitor = { navController.navigate(LiveMonitorRoute) },
+              onOptimizerAction = viewModel::handleOptimizerAction,
+              onExportCsv = { csvSave.launch("netra_battery_report.csv") },
+              onQueueChargingCsvExport = viewModel::queueChargingCsvExport,
             )
           }
           composable<LiveMonitorRoute> {
@@ -273,6 +276,9 @@ private fun NetraRootScaffold(
               strings = strings,
               onNavigateBack = { navController.navigateUp() },
               onOpenBatteryHistory = { navigateTo(BatteryRoute) },
+              telemetry = state.telemetry,
+              chargingDiagnosis = state.chargingDiagnosis,
+              historySnapshots = if (state.snapshots24h.isNotEmpty()) state.snapshots24h else state.hourlySnapshots,
             )
           }
           composable<HeatRoute> {
@@ -333,6 +339,7 @@ private fun NetraRootScaffold(
               onExportCsv = { csvSave.launch("netra_battery_report.csv") },
               onExportPdf = { pdfSave.launch("netra_battery_report.pdf") },
               onClearAllData = viewModel::clearAllLocalData,
+              onQueueChargingCsvExport = viewModel::queueChargingCsvExport,
             )
           }
         }

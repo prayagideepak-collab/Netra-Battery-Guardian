@@ -72,6 +72,29 @@ interface NetraDao {
   @Query("SELECT * FROM battery_health_logs ORDER BY timestampMillis DESC LIMIT 60")
   fun observeBatteryHealthLogs(): Flow<List<BatteryHealthLogEntity>>
 
+  @Query("SELECT * FROM battery_health_logs ORDER BY timestampMillis DESC LIMIT 365")
+  suspend fun getAllBatteryHealthLogsForExport(): List<BatteryHealthLogEntity>
+
+  @Query(
+    """
+    SELECT * FROM activity_logs
+    WHERE category = 'HEAT' AND (severity = 'CRITICAL' OR severity = 'WARNING')
+    ORDER BY timestampMillis DESC
+    LIMIT 100
+    """
+  )
+  fun observeCriticalThermalEvents(): Flow<List<ActivityLogEntity>>
+
+  @Query(
+    """
+    SELECT * FROM activity_logs
+    WHERE category = 'HEAT' AND (severity = 'CRITICAL' OR severity = 'WARNING')
+    ORDER BY timestampMillis DESC
+    LIMIT 100
+    """
+  )
+  suspend fun getCriticalThermalEvents(): List<ActivityLogEntity>
+
   @Query("DELETE FROM battery_health_logs WHERE timestampMillis < :cutoffMillis")
   suspend fun deleteBatteryHealthLogsOlderThan(cutoffMillis: Long)
 

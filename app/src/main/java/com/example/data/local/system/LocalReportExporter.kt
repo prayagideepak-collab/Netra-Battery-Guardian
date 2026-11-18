@@ -1,12 +1,15 @@
 package com.example.data.local.system
 
-import com.example.domain.model.telemetryText
-import com.example.domain.model.batteryLevelText
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
+import android.os.BatteryManager
 import com.example.data.repository.BatteryHistoryRepository
+import com.example.domain.model.batteryLevelText
+import com.example.domain.model.telemetryText
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -18,13 +21,122 @@ import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
+data class CsvExportResult(
+  val exported: Boolean,
+  val file: File? = null,
+  val skippedReason: String? = null,
+  val healthRows: Int = 0,
+  val snapshotRows: Int = 0,
+  val activityRows: Int = 0,
+)
+
 @Singleton
 class LocalReportExporter @Inject constructor(
   @ApplicationContext private val context: Context,
   private val historyRepository: BatteryHistoryRepository,
 ) {
+  private var logWriter: BoundedLogFileWriter? = null
+
+  constructor(
+    context: Context,
+    historyRepository: BatteryHistoryRepository,
+    logWriter: BoundedLogFileWriter,
+  ) : this(context, historyRepository) {
+    this.logWriter = logWriter
+  }
+
   private val dateFormatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
   private val fileStampFormatter = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
+
+  fun isDeviceCurrentlyCharging(intentOverride: Intent? = null): Boolean {
+    val intent =
+      intentOverride ?: context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+    val status =
+      intent?.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN)
+        ?: BatteryManager.BATTERY_STATUS_UNKNOWN
+    if (status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL) {
+      return true
+    }
+    if (intent != null && status != BatteryManager.BATTERY_STATUS_UNKNOWN) {
+      return false
+    }
+    val bm = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
+    return bm?.isCharging == true
+  }
+
+  /**
+   * Exports battery health (cycles, capacity, degradation) and temperature history logs
+   * to a local CSV file inside app-private filesDir strictly when the device is currently charging.
+   */
+  suspend fun exportBatteryHealthAndTempCsvIfCharging(
+    intentOverride: Intent? = null,
+    lookbackDays: Int = 30,
+  ): CsvExportResult =
+    withContext(Dispatchers.IO) {
+      if (!isDeviceCurrentlyCharging(intentOverride)) {
+        logWriter?.append("CSV_EXPORT", "Skipped battery health & temperature CSV export: device is not charging.")
+        return@withContext CsvExportResult(
+          exported = false,
+          skippedReason = "CSV export is only triggered while the device is charging.",
+        )
+      }
+
+      val dir = getReportsDir()
+      val file = File(dir, "netra_battery_health_history_${fileStampFormatter.format(Date())}.csv")
+      val snapshots =
+        historyRepository.getSnapshotsSince(
+          System.currentTimeMillis() - lookbackDays.toLong() * 24L * 3600_000L,
+        )
+      val healthLogs = historyRepository.getBatteryHealthLogsForExport()
+      val logs = historyRepository.getLogsForExport()
+
+      val sb = StringBuilder()
+      sb.appendLine("# Netra Battery Guardian - Offline Battery Health & Temperature History CSV (100% On-Device)")
+      sb.appendLine("record_type,timestamp,level_percent,temp_c,voltage_mv,current_ma,power_watts,charging,thermal_level,cycle_count,design_capacity_mah,estimated_capacity_mah,degradation_percent,health_percent,source_or_profile,title,detail")
+
+      healthLogs.forEach { h ->
+        sb.appendLine(
+          "HEALTH_LOG,${dateFormatter.format(Date(h.timestampMillis))},,,,,,true,,${
+            String.format(Locale.US, "%.2f", h.estimatedCycleCount)
+          },${h.designCapacityMah},${h.estimatedCapacityMah},${
+            String.format(Locale.US, "%.1f", h.degradationPercent)
+          },${String.format(Locale.US, "%.1f", h.healthPercent)},${h.sourceLabel},Daily Cycle & Capacity,Health ${
+            String.format(Locale.US, "%.1f", h.healthPercent)
+          }%",
+        )
+      }
+
+      snapshots.forEach { s ->
+        sb.appendLine(
+          "TEMP_SNAPSHOT,${dateFormatter.format(Date(s.timestampMillis))},${s.levelPercent},${
+            String.format(Locale.US, "%.1f", s.temperatureCelsius)
+          },${s.voltageMv},${String.format(Locale.US, "%.0f", s.currentMa)},${
+            String.format(Locale.US, "%.2f", s.powerWatts)
+          },${s.isCharging},${s.thermalLevel},,,,,,${s.activeProfile},,",
+        )
+      }
+
+      logs.forEach { log ->
+        val safeTitle = log.titleEn.replace(",", ";")
+        val safeDetail = log.detailEn.replace(",", ";")
+        sb.appendLine(
+          "LOG_${log.category},${dateFormatter.format(Date(log.timestampMillis))},,,,,,,,,,,,,${log.severity},$safeTitle,$safeDetail",
+        )
+      }
+
+      file.writeText(sb.toString())
+      logWriter?.append(
+        "CSV_EXPORT",
+        "Exported ${file.name} while charging (${healthLogs.size} health rows, ${snapshots.size} temp rows).",
+      )
+      CsvExportResult(
+        exported = true,
+        file = file,
+        healthRows = healthLogs.size,
+        snapshotRows = snapshots.size,
+        activityRows = logs.size,
+      )
+    }
 
   suspend fun exportCsv(): File =
     withContext(Dispatchers.IO) {

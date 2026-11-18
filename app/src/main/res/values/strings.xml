@@ -6,4 +6,10 @@
     <string name="channel_advisory_desc">Charging alerts, background drain summaries, and storage tips</string>
     <string name="channel_critical_name">Thermal &amp; Low Battery Alerts</string>
     <string name="channel_critical_desc">Urgent overheating and critical low-battery safety notifications</string>
+    <string name="widget_description">Monitor real-time battery percentage and thermal safety status directly on your home screen.</string>
+    <string name="widget_title_label">NETRA BATTERY SENTINEL</string>
+    <string name="widget_default_percent">Unavailable</string>
+    <string name="widget_default_thermal">Thermal: Unavailable</string>
+    <string name="widget_default_status">Status: Unavailable</string>
+    <string name="widget_default_subtitle">Tap to open Battery Sentinel</string>
 </resources>

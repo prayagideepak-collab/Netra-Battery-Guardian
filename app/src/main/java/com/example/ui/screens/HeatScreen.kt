@@ -22,6 +22,8 @@ import androidx.compose.ui.unit.dp
 import com.example.domain.model.AdaptivePowerTier
 import com.example.domain.model.GuardianProfile
 import com.example.ui.NetraUiState
+import com.example.ui.components.BatteryTemperatureTrendChart
+import com.example.ui.components.CriticalThermalEventsListView
 import com.example.ui.components.GuardianCard
 import com.example.ui.components.HourlyTempVoltageChart
 import com.example.ui.components.StatusPill
@@ -48,7 +50,7 @@ fun HeatScreen(
   val report = state.heatReport
 
   LazyColumn(
-    modifier = modifier.fillMaxSize(),
+    modifier = modifier.fillMaxSize().testTag("heat_screen_list"),
     contentPadding = PaddingValues(16.dp),
     verticalArrangement = Arrangement.spacedBy(14.dp),
     horizontalAlignment = Alignment.CenterHorizontally,
@@ -265,6 +267,29 @@ fun HeatScreen(
             color = SemanticWarmAmber,
           )
         }
+      }
+    }
+
+    // Historical Log of Critical Thermal Events (Retrieved from Room Database)
+    item {
+      CriticalThermalEventsListView(
+        criticalThermalEvents = state.criticalThermalEvents,
+        fallbackActivityLogs = state.activityLogs,
+        isHindi = strings.isHindi,
+        whyLabel = strings.whyButton,
+        modifier = Modifier.widthIn(max = 720.dp),
+      )
+    }
+
+    // Room Battery Temperature Trend Visualization
+    item {
+      GuardianCard(modifier = Modifier.widthIn(max = 720.dp)) {
+        BatteryTemperatureTrendChart(
+          snapshots24h = state.snapshots24h,
+          snapshots7d = state.snapshots7d,
+          isHindi = strings.isHindi,
+          isLowPowerSurvival = state.powerBudget.activeTier == AdaptivePowerTier.SURVIVAL,
+        )
       }
     }
 

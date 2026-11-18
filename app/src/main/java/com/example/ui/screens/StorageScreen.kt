@@ -24,6 +24,7 @@ import com.example.domain.model.StorageActionTarget
 import com.example.ui.NetraUiState
 import com.example.ui.components.GuardianCard
 import com.example.ui.components.StatusPill
+import com.example.ui.components.StorageAnalysisDashboard
 import com.example.ui.components.WhyExplainChip
 import com.example.ui.i18n.AppStrings
 import com.example.ui.theme.SemanticCoolMint
@@ -49,7 +50,7 @@ fun StorageScreen(
     }
 
   LazyColumn(
-    modifier = modifier.fillMaxSize(),
+    modifier = modifier.fillMaxSize().testTag("storage_screen_list"),
     contentPadding = PaddingValues(16.dp),
     verticalArrangement = Arrangement.spacedBy(14.dp),
     horizontalAlignment = Alignment.CenterHorizontally,
@@ -61,6 +62,20 @@ fun StorageScreen(
           style = MaterialTheme.typography.headlineMedium,
         )
       }
+    }
+
+    // Storage Analysis Dashboard (Occupied vs Free Space + Top Storage-Consuming App Categories)
+    item {
+      StorageAnalysisDashboard(
+        storageInsight = st,
+        diskUsageReport = state.diskUsageReport,
+        isHindi = strings.isHindi,
+        onCategoryAction = { target, pkg ->
+          if (target == StorageActionTarget.APP_OWN_CACHE) onCleanOwnCache()
+          else onOpenStorageTarget(target, pkg)
+        },
+        modifier = Modifier.widthIn(max = 720.dp),
+      )
     }
 
     item {

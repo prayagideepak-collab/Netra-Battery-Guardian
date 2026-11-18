@@ -24,9 +24,14 @@ import com.example.data.local.system.StorageInspector
 import com.example.data.repository.BatteryHistoryRepository
 import com.example.domain.engine.AdaptivePowerTierEngine
 import com.example.domain.engine.AutomationRulesEngine
+import com.example.domain.engine.BatteryHealthOptimizer
 import com.example.domain.engine.BatteryLifecycleEstimator
+import com.example.domain.engine.BatteryOptimizationReport
 import com.example.domain.engine.ChargingSpeedClassifier
+import com.example.domain.engine.DozeEfficiencyCalculator
+import com.example.domain.engine.DozeEfficiencyMetrics
 import com.example.domain.engine.HeatingDiagnosisEngine
+import com.example.domain.engine.OptimizerActionTarget
 import com.example.domain.engine.SelfHealingSupervisor
 import com.example.domain.model.AdaptivePowerTier
 import com.example.domain.model.AppLanguage
@@ -48,6 +53,7 @@ import com.example.service.BatteryGuardianService
 import com.example.service.BatteryMonitoringService
 import com.example.service.DozeModeMonitor
 import com.example.service.DozeMonitorState
+import com.example.service.NetraWorkScheduler
 import com.example.service.ThermalMonitor
 import com.example.service.ThermalMonitorState
 import com.example.voice.ChargingVoiceAssistant
@@ -86,12 +92,16 @@ data class NetraUiState(
   val chargingSessions: List<ChargingSessionEntity> = emptyList(),
   val dischargeSessions: List<DischargeSessionEntity> = emptyList(),
   val activityLogs: List<ActivityLogEntity> = emptyList(),
+  val criticalThermalEvents: List<ActivityLogEntity> = emptyList(),
   val prefs: UserPreferences = UserPreferences(),
   val selfHealingStatus: SelfHealingStatus = SelfHealingStatus(),
   val thermalState: ThermalMonitorState = ThermalMonitorState(),
   val coolingBrightness: com.example.data.local.system.CoolingBrightnessState = com.example.data.local.system.CoolingBrightnessState(),
   val dozeState: DozeMonitorState = DozeMonitorState(),
+  val dozeEfficiency: DozeEfficiencyMetrics = DozeEfficiencyMetrics(),
   val batteryHealthLogs: List<BatteryHealthLogEntity> = emptyList(),
+  val optimizationReport: BatteryOptimizationReport = BatteryOptimizationReport(),
+  val lastCsvExportPath: String? = null,
   val diskUsageReport: DiskUsageReport? = null,
   val statusMessage: String? = null,
   val isNightSilentActive: Boolean = false,
@@ -115,7 +125,9 @@ class MainViewModel @Inject constructor(
   private val reportExporter: LocalReportExporter,
   private val thermalMonitor: ThermalMonitor,
   private val dozeModeMonitor: DozeModeMonitor,
+  private val dozeEfficiencyCalculator: DozeEfficiencyCalculator,
   private val batteryLifecycleEstimator: BatteryLifecycleEstimator,
+  private val batteryHealthOptimizer: BatteryHealthOptimizer,
 ) : AndroidViewModel(app) {
 
   private val _uiState = MutableStateFlow(NetraUiState())
@@ -168,6 +180,11 @@ class MainViewModel @Inject constructor(
               prefs = prefs,
               thermalState = thermal,
               dozeState = doze,
+              dozeEfficiency = dozeEfficiencyCalculator.calculate(
+                activityLogs = state.activityLogs,
+                dozeState = doze,
+                estimatedCapacityMah = state.telemetry.estimatedCapacityMah,
+              ),
               diskUsageReport = diskReport,
               isNightSilentActive = voiceAssistant.isNightSilentActive(prefs),
             )
@@ -175,7 +192,7 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    // Refresh Room chart & session history ONLY while UI is visible (low-power constraint)
+    // Refresh Room chart, critical thermal events & session history ONLY while UI is visible (low-power constraint)
     viewModelScope.launch {
       _isUiVisible
         .flatMapLatest { visible ->
@@ -195,15 +212,18 @@ class MainViewModel @Inject constructor(
                 historyRepository.observeSnapshotsTodayCount(startOfDay),
                 historyRepository.observeHourlySnapshots(),
                 historyRepository.observeBatteryHealthLogs(),
-              ) { countToday, hourly, healthLogs -> Triple(countToday, hourly, healthLogs) }
-            ) { tuple, metricsTriple ->
-              Pair(tuple, metricsTriple)
+                historyRepository.observeCriticalThermalEvents(),
+              ) { countToday, hourly, healthLogs, criticalThermal ->
+                Tuple4(countToday, hourly, healthLogs, criticalThermal)
+              }
+            ) { tuple, metricsQuad ->
+              Pair(tuple, metricsQuad)
             }
           }
         }
-        .collect { (tuple, metricsTriple) ->
+        .collect { (tuple, metricsQuad) ->
           val (s24, s7d, chargeSess, dischargeSess, logs) = tuple
-          val (countToday, hourly, healthLogs) = metricsTriple
+          val (countToday, hourly, healthLogs, criticalThermal) = metricsQuad
           _uiState.update { state ->
             state.copy(
               snapshots24h = s24,
@@ -213,6 +233,12 @@ class MainViewModel @Inject constructor(
               chargingSessions = chargeSess,
               dischargeSessions = dischargeSess,
               activityLogs = logs,
+              criticalThermalEvents = criticalThermal,
+              dozeEfficiency = dozeEfficiencyCalculator.calculate(
+                activityLogs = logs,
+                dozeState = state.dozeState,
+                estimatedCapacityMah = state.telemetry.estimatedCapacityMah,
+              ),
               powerBudget = state.powerBudget.copy(snapshotsRecordedToday = countToday),
             )
           }
@@ -341,6 +367,17 @@ class MainViewModel @Inject constructor(
           _uiState.value.storageInsight
         }
 
+      val optimizationReport = batteryHealthOptimizer.analyze(
+        telemetry = telemetry,
+        prefs = prefs,
+        powerBudget = powerBudget,
+        dozeState = dozeModeMonitor.state.value,
+        topApps = topApps,
+        latestHealthLog = _uiState.value.batteryHealthLogs.firstOrNull(),
+        recentDischarges = _uiState.value.dischargeSessions,
+        nowMillis = telemetry.timestampMillis,
+      )
+
       _uiState.update {
         it.copy(
           telemetry = telemetry,
@@ -349,6 +386,7 @@ class MainViewModel @Inject constructor(
           activeProfile = eval.activeProfile,
           powerBudget = powerBudget,
           storageInsight = storageInsight,
+          optimizationReport = optimizationReport,
           topApps = topApps,
           hasUsageStatsPermission = hasUsage,
           selfHealingStatus = selfHealingSupervisor.currentStatus(),
@@ -554,7 +592,57 @@ class MainViewModel @Inject constructor(
     voiceAssistant.testVoice(_uiState.value.prefs)
   }
 
+  fun handleOptimizerAction(target: OptimizerActionTarget, packageHint: String? = null) {
+    when (target) {
+      OptimizerActionTarget.BATTERY_OPTIMIZATION_SETTINGS -> openBatteryOptimizationSettings()
+      OptimizerActionTarget.BATTERY_SAVER_SETTINGS -> openBatterySaverSettings()
+      OptimizerActionTarget.APP_INFO -> {
+        if (!packageHint.isNullOrBlank()) openAppInfo(packageHint)
+        else openBatteryOptimizationSettings()
+      }
+      OptimizerActionTarget.LOCATION_SETTINGS -> openLocationSettings()
+      OptimizerActionTarget.DATA_SAVER_SETTINGS -> openDataSaverSettings()
+      OptimizerActionTarget.THERMAL_COOLING_MODE -> {
+        if (_uiState.value.activeProfile != GuardianProfile.COOLING) {
+          toggleCoolingModeQuick()
+        } else {
+          _uiState.update { it.copy(statusMessage = "Cooling Mode is already active.") }
+        }
+      }
+    }
+  }
+
   fun exportCsvReport(destination: android.net.Uri?) = saveReport(destination, false)
+
+  fun exportCsvReport() {
+    viewModelScope.launch {
+      val result = reportExporter.exportBatteryHealthAndTempCsvIfCharging(
+        lookbackDays = _uiState.value.prefs.dataRetentionDays,
+      )
+      if (result.exported && result.file != null) {
+        _uiState.update {
+          it.copy(
+            lastCsvExportPath = result.file.absolutePath,
+            statusMessage = "CSV exported while charging: ${result.file.name}",
+          )
+        }
+      } else {
+        _uiState.update {
+          it.copy(
+            statusMessage = result.skippedReason
+              ?: "Connect charger to export battery health & temperature CSV.",
+          )
+        }
+      }
+    }
+  }
+
+  fun queueChargingCsvExport() {
+    NetraWorkScheduler.scheduleChargingCsvExport(app)
+    _uiState.update {
+      it.copy(statusMessage = "Scheduled CSV export via WorkManager for next charging window.")
+    }
+  }
 
   fun exportPdfReport(destination: android.net.Uri?) = saveReport(destination, true)
 

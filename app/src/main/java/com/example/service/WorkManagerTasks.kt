@@ -19,6 +19,7 @@ import com.example.data.local.db.BatterySnapshot
 import com.example.data.local.prefs.PreferencesRepository
 import com.example.data.local.system.BatteryTelemetryCollector
 import com.example.data.local.system.DiskUsageHelper
+import com.example.data.local.system.LocalReportExporter
 import com.example.data.local.system.StorageInspector
 import com.example.data.repository.BatteryHistoryRepository
 import com.example.domain.engine.BatteryLifecycleEstimator
@@ -227,6 +228,25 @@ class DailyBatteryHealthWorker @AssistedInject constructor(
 }
 
 /**
+ * Deferred one-time worker that exports battery health & temperature history logs
+ * to a local CSV file strictly when the device is charging.
+ */
+@HiltWorker
+class ChargingCsvExportWorker @AssistedInject constructor(
+  @Assisted appContext: Context,
+  @Assisted params: WorkerParameters,
+  private val reportExporter: LocalReportExporter,
+  private val dozeModeMonitor: DozeModeMonitor,
+) : CoroutineWorker(appContext, params) {
+
+  override suspend fun doWork(): Result {
+    if (dozeModeMonitor.shouldSkipNonEssentialWork()) return Result.retry()
+    val res = reportExporter.exportBatteryHealthAndTempCsvIfCharging()
+    return if (res.exported) Result.success() else Result.retry()
+  }
+}
+
+/**
  * Low-power periodic WorkManager task that persists a BatterySnapshot to Room
  * strictly when the device is idle (Constraints.setRequiresDeviceIdle = true).
  */
@@ -296,6 +316,29 @@ object NetraWorkScheduler {
   const val WORK_HEALTH_CHECK = "netra_health_check"
   const val WORK_IDLE_BATTERY_PERSISTENCE = "netra_idle_battery_persistence"
   const val WORK_DAILY_BATTERY_HEALTH = "netra_daily_battery_health"
+  const val WORK_CHARGING_CSV_EXPORT = "netra_charging_csv_export"
+  const val WORK_THERMAL_MONITOR = "netra_thermal_monitor"
+
+  fun buildThermalMonitorRequest(): PeriodicWorkRequest =
+    PeriodicWorkRequestBuilder<ThermalSafetyMonitorWorker>(30, TimeUnit.MINUTES)
+      .build()
+
+  fun buildChargingCsvExportRequest() =
+    OneTimeWorkRequestBuilder<ChargingCsvExportWorker>()
+      .setConstraints(
+        Constraints.Builder()
+          .setRequiresCharging(true)
+          .build()
+      )
+      .build()
+
+  fun scheduleChargingCsvExport(context: Context) {
+    WorkManager.getInstance(context).enqueueUniqueWork(
+      WORK_CHARGING_CSV_EXPORT,
+      ExistingWorkPolicy.REPLACE,
+      buildChargingCsvExportRequest(),
+    )
+  }
 
   fun buildDailyBatteryHealthRequest(): PeriodicWorkRequest {
     val chargingConstraints =
@@ -385,6 +428,12 @@ object NetraWorkScheduler {
       WORK_DAILY_BATTERY_HEALTH,
       ExistingPeriodicWorkPolicy.KEEP,
       buildDailyBatteryHealthRequest(),
+    )
+
+    wm.enqueueUniquePeriodicWork(
+      WORK_THERMAL_MONITOR,
+      ExistingPeriodicWorkPolicy.KEEP,
+      buildThermalMonitorRequest(),
     )
   }
 
