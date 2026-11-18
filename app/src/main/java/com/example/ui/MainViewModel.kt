@@ -321,7 +321,7 @@ class MainViewModel @Inject constructor(
         )
       }
       val chargingDiag = chargingClassifier.diagnose(telemetry)
-      com.example.widget.GuardianBatteryWidget.publish(app, telemetry, chargingDiag)
+      com.example.widget.GuardianBatteryWidget.publish(app, telemetry, chargingDiag, prefs.appLanguage)
       val heatReport =
         heatingDiagnosisEngine.diagnose(
           telemetry = telemetry,
@@ -459,7 +459,7 @@ class MainViewModel @Inject constructor(
 
   // Settings updates
   fun setAppLanguage(lang: AppLanguage) {
-    viewModelScope.launch { preferencesRepository.updateAppLanguage(lang) }
+    viewModelScope.launch { preferencesRepository.updateAppLanguage(lang); refreshNow(forceSnapshot = false) }
   }
 
   fun setVoiceLanguage(lang: AppLanguage) {
