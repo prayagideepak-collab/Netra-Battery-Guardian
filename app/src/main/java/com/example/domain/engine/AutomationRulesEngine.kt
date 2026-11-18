@@ -199,20 +199,26 @@ class AutomationRulesEngine @Inject constructor(
       preferencesRepository.setBelow35Since(0L)
     }
 
-    val coolingActive = zone != TemperatureZone.UNAVAILABLE && zone.ordinal >= TemperatureZone.HOT.ordinal
+    val thermalCooling = zone != TemperatureZone.UNAVAILABLE && zone.ordinal >= TemperatureZone.HOT.ordinal
+    val manualCooling = prefs.manualProfileOverride == GuardianProfile.COOLING
+    val coolingActive = thermalCooling || manualCooling
+    val knownCoolingState: Boolean? = when {
+      coolingActive -> true
+      zone == TemperatureZone.UNAVAILABLE -> null
+      else -> false
+    }
+    // This is the sole cooling decision. The collector delegates to one persistent settings writer.
+    val brightnessApplied = telemetryCollector.reconcileCoolingBrightness(knownCoolingState, if (manualCooling) 90 else 95)
     val coolingStepsEn = mutableListOf<String>()
     val coolingStepsHi = mutableListOf<String>()
 
     if (coolingActive) {
-      if (telemetry.canWriteSettings && telemetry.screenBrightnessPercent > 45) {
-        val lowered = telemetryCollector.tryLowerBrightnessForCooling(targetBrightness255 = 95)
-        if (lowered) {
-          coolingStepsEn += "Gradually lowered screen brightness to reduce display heat."
-          coolingStepsHi += "स्क्रीन की गर्मी कम करने के लिए ब्राइटनेस धीरे-धीरे कम की गई।"
-        }
+      if (brightnessApplied) {
+        coolingStepsEn += "Cooling brightness applied with saved original settings."
+        coolingStepsHi += "मूल सेटिंग सहेजकर कूलिंग ब्राइटनेस लागू की गई।"
       } else {
-        coolingStepsEn += "Recommended lowering brightness / enabling auto-brightness."
-        coolingStepsHi += "ब्राइटनेस कम करने या ऑटो-ब्राइटनेस चालू करने की सलाह दी गई।"
+        coolingStepsEn += "Brightness not changed: consent, permission or settings ownership may be unavailable."
+        coolingStepsHi += "ब्राइटनेस नहीं बदली: सहमति, अनुमति या सेटिंग नियंत्रण उपलब्ध नहीं है।"
       }
 
       if (prefs.locationSaverMode != LocationSaverMode.NORMAL && !prefs.emergencyLocationException) {

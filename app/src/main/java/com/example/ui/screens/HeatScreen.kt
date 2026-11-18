@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -39,6 +40,8 @@ fun HeatScreen(
   strings: AppStrings,
   onToggleCoolingMode: () -> Unit,
   onOpenWriteSettings: () -> Unit,
+  onSetCoolingBrightnessAllowed: (Boolean) -> Unit = {},
+  onRetryCoolingBrightnessRestore: () -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   val t = state.telemetry
@@ -116,6 +119,30 @@ fun HeatScreen(
                 "Netra never fakes CPU cooling or kills apps. It lowers screen load (with your permission), pauses non-essential sampling, and guides you to remove heat sources."
               },
             )
+          }
+
+          Text(if (strings.isHindi) "वैकल्पिक ब्राइटनेस नियंत्रण" else "Optional brightness control", style = MaterialTheme.typography.titleMedium)
+          Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+              if (strings.isHindi) "कूलिंग को स्क्रीन की रोशनी कम करने दें" else "Allow cooling to dim the screen",
+              modifier = Modifier.weight(1f),
+            )
+            Switch(
+              checked = state.coolingBrightness.enabled,
+              onCheckedChange = onSetCoolingBrightnessAllowed,
+              modifier = Modifier.testTag("cooling_brightness_consent"),
+            )
+          }
+          Text(
+            if (strings.isHindi) "शुरू में OFF, अपडेट पर भी। सक्षम करने पर ब्राइटनेस कम और ऑटो-ब्राइटनेस मैनुअल हो सकती है। पहले मूल सेटिंग सहेजी जाएगी। कूलिंग समाप्त या OFF पर बहाली की कोशिश होगी। आपके बाद के बदलाव नहीं बदले जाएंगे। Android अनुमति भी ज़रूरी है।"
+            else "OFF by default, including upgrades. When enabled, cooling may lower brightness and switch adaptive brightness to manual. Original settings are saved first. Restore is attempted when cooling ends or you turn this off. If you change brightness yourself, Netra leaves your newer settings alone. Android permission is also required.",
+            style = MaterialTheme.typography.bodyMedium,
+          )
+          Text(state.coolingBrightness.status, style = MaterialTheme.typography.bodyMedium)
+          if (state.coolingBrightness.restorePending) {
+            OutlinedButton(onClick = onRetryCoolingBrightnessRestore, modifier = Modifier.testTag("cooling_restore_retry")) {
+              Text(if (strings.isHindi) "बहाली लंबित: फिर कोशिश करें" else "Restore pending: retry")
+            }
           }
 
           if (!t.canWriteSettings) {

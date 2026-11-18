@@ -218,25 +218,9 @@ class BatteryTelemetryCollector @Inject constructor(
     }.getOrDefault(false)
   }
 
-  fun tryLowerBrightnessForCooling(targetBrightness255: Int = 90): Boolean {
-    if (!Settings.System.canWrite(context)) return false
-    return runCatching {
-      val current = Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS)
-      if (current > targetBrightness255) {
-        Settings.System.putInt(
-          context.contentResolver,
-          Settings.System.SCREEN_BRIGHTNESS_MODE,
-          Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL,
-        )
-        Settings.System.putInt(
-          context.contentResolver,
-          Settings.System.SCREEN_BRIGHTNESS,
-          targetBrightness255.coerceIn(30, 255),
-        )
-        true
-      } else {
-        false
-      }
-    }.getOrDefault(false)
-  }
+  private val coolingBrightness = CoolingBrightnessController(context)
+  val coolingBrightnessState get() = coolingBrightness.state
+  fun setCoolingBrightnessAllowed(allowed: Boolean) = coolingBrightness.setEnabled(allowed)
+  fun reconcileCoolingBrightness(active: Boolean?, target: Int = 95): Boolean = coolingBrightness.reconcile(active, target)
+  fun retryCoolingBrightnessRestore() = coolingBrightness.retryRestore()
 }
