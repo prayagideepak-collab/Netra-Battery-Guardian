@@ -328,12 +328,14 @@ fun LiveMonitorContent(
             }
           }
 
-          LinearProgressIndicator(
+          if (serviceState.levelPercent !in 0..100) {
+            Text("Battery level unavailable", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("battery_progress_unavailable"))
+          } else LinearProgressIndicator(
             progress = { (serviceState.levelPercent.coerceIn(0, 100) / 100f) },
             modifier = Modifier
               .fillMaxWidth()
               .height(8.dp),
-            color = if (serviceState.levelPercent <= 15) SemanticCriticalRed else SemanticCoolMint,
+            color = if (serviceState.levelPercent !in 0..100) MaterialTheme.colorScheme.onSurfaceVariant else if (serviceState.levelPercent <= 15) SemanticCriticalRed else SemanticCoolMint,
             trackColor = MaterialTheme.colorScheme.surfaceVariant,
           )
 
