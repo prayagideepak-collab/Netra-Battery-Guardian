@@ -377,6 +377,8 @@ class ChargingVoiceAssistant @Inject constructor(
       return
     }
 
+    if (skipForPlayback()) return
+
     val now = System.currentTimeMillis()
     val last = lastSpokenByKey[key] ?: 0L
     if (now - last < 30_000L) return
@@ -416,6 +418,11 @@ class ChargingVoiceAssistant @Inject constructor(
     urgent: Boolean,
     fallbackTitle: String,
   ) {
+    // Recheck after lazy initialization: playback may have started while TTS bound.
+    if (skipForPlayback()) {
+      scheduleIdleShutdown()
+      return
+    }
     val engine = tts ?: return
     if (currentLocaleLang != prefs.voiceLanguage) {
       applyLocale(prefs.voiceLanguage)
@@ -431,6 +438,13 @@ class ChargingVoiceAssistant @Inject constructor(
       postFallbackNotification(urgent, fallbackTitle, message)
     }
     scheduleIdleShutdown()
+  }
+
+  private fun skipForPlayback(): Boolean {
+    if (!VoicePlaybackGate.shouldSkip(context)) return false
+    pendingUtterance = null
+    _assistantState.update { it.copy(lastSkippedReason = "Skipped: media/call active or audio state unavailable") }
+    return true
   }
 
   private fun postFallbackNotification(urgent: Boolean, title: String, message: String) {
