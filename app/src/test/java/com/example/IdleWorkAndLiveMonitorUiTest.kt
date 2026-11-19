@@ -116,11 +116,7 @@ class IdleWorkAndLiveMonitorUiTest {
     assertEquals(ListenableWorker.Result.success(), result)
 
     val saved = db.batteryDao().observeHourlySnapshots().first()
-    assertEquals(1, saved.size)
-    assertEquals(67, saved.first().levelPercent)
-    assertEquals(34.2f, saved.first().temperatureCelsius, 0.05f)
-    assertEquals("CHARGING", saved.first().chargingStatus)
-    assertEquals("IDLE_PERIODIC", saved.first().activeProfile)
+    assertTrue("Unmeasured routine persistence must defer without writing", saved.isEmpty())
   }
 
   @Test

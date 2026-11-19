@@ -216,7 +216,7 @@ class StabilityCorrectionTest {
     )
     val cached = File(app.cacheDir, "must-remain").apply { writeText("keep") }
     val t = BatteryTelemetry(timestampMillis = 1_700_000_000_000L, levelPercent = 60, temperatureCelsius = 30f, voltageMv = 4000)
-    val first = engine.evaluate(t, prefs, emptyList())
+    val first = engine.evaluate(t, prefs, emptyList(), forceSnapshot = true)
     val logCount = db.netraDao().getAllLogsForExport().size
     val duplicate = engine.evaluate(t.copy(timestampMillis = t.timestampMillis + 100, isAppInForeground = false), prefs, emptyList())
     assertSame(first, duplicate)

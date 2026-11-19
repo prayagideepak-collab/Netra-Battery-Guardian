@@ -1,5 +1,8 @@
 package com.example.domain.engine
 
+import com.example.domain.engine.MeasuredPowerBudget
+import com.example.domain.model.PowerFeature
+
 import com.example.domain.model.batteryLevelText
 import com.example.domain.model.telemetryText
 import com.example.data.local.prefs.PreferencesRepository
@@ -72,7 +75,7 @@ class AutomationRulesEngine @Inject constructor(
       previous.copy(timestampMillis = 0L, isAppInForeground = false) == normalized) {
       previousOutput?.let { return@withLock it }
     }
-    val routineAllowed = activeTier == com.example.domain.model.AdaptivePowerTier.NORMAL || activeTier == com.example.domain.model.AdaptivePowerTier.SAVER
+    val routineAllowed = MeasuredPowerBudget.permits(PowerFeature.ORDINARY_MILESTONE) && (activeTier == com.example.domain.model.AdaptivePowerTier.NORMAL || activeTier == com.example.domain.model.AdaptivePowerTier.SAVER)
     chargingClassifier.recordSample(telemetry)
     temperatureEngine.recordTemperature(telemetry.timestampMillis, telemetry.temperatureCelsius)
 
@@ -124,13 +127,13 @@ class AutomationRulesEngine @Inject constructor(
           whyHi = "बैटरी मोड स्क्रीन ऑन/ऑफ़ खपत की निगरानी करता है और बैकग्राउंड ड्रेन रोकता है।",
         )
       }
-    } else if (telemetry.isPlugged) {
+    } else if (telemetry.isPlugged && (prevPlugged == null || MeasuredPowerBudget.permits(PowerFeature.ROUTINE_HISTORY))) {
       historyRepository.startOrUpdateChargingSession(
         telemetry = telemetry,
         speedClass = chargingDiagnosis.speedClass,
         powerWatts = chargingDiagnosis.netPowerWatts,
       )
-    } else {
+    } else if (!telemetry.isPlugged && (prevPlugged == null || MeasuredPowerBudget.permits(PowerFeature.ROUTINE_HISTORY))) {
       historyRepository.startOrUpdateDischargeSession(telemetry = telemetry)
     }
     lastPluggedState = telemetry.isPlugged
@@ -331,7 +334,7 @@ class AutomationRulesEngine @Inject constructor(
 
     // 8. Persist snapshot batched according to Adaptive Power Tier interval
     val minIntervalMillis = dbBatchIntervalSeconds.coerceAtLeast(60) * 1000L
-    if (forceSnapshot || now - lastSnapshotSavedMillis >= minIntervalMillis) {
+    if (forceSnapshot || (MeasuredPowerBudget.permits(PowerFeature.ROUTINE_HISTORY) && now - lastSnapshotSavedMillis >= minIntervalMillis)) {
       lastSnapshotSavedMillis = now
       historyRepository.recordSnapshot(telemetry, activeProfile)
     }

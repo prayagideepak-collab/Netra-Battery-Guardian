@@ -137,7 +137,7 @@ class AdaptivePowerTierEngine @Inject constructor() {
       feature, current, System.nanoTime() / 1_000_000L, inDoze,
       stateFresh = current.sequence == expectedSequence,
     )
-    if (!mode.allowed || feature.importance == FeatureImportance.ESSENTIAL) return mode
+    if (!mode.allowed || MeasuredPowerBudget.permits(feature)) return mode
     // Finite per-feature limits remain unmeasured. Never turn missing evidence into unlimited work.
     return FeatureDecision(
       FeatureDisposition.DEFER, FeatureDecisionReason.BUDGET_NOT_VERIFIED,

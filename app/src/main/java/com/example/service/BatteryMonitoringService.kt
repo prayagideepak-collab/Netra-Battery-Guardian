@@ -1,5 +1,8 @@
 package com.example.service
 
+import com.example.domain.engine.MeasuredPowerBudget
+import com.example.domain.model.PowerFeature
+
 import com.example.domain.model.batteryLevelText
 import com.example.domain.model.telemetryText
 import android.app.NotificationManager
@@ -17,7 +20,6 @@ import com.example.data.local.db.BatterySnapshot
 import com.example.data.local.prefs.PreferencesRepository
 import com.example.data.local.system.AppPowerInspector
 import com.example.data.local.system.BatteryTelemetryCollector
-import com.example.domain.model.allowsUsageInspection
 import com.example.domain.engine.AdaptivePowerTierEngine
 import com.example.domain.engine.AutomationRulesEngine
 import com.example.domain.engine.BatteryLifecycleEstimator
@@ -174,7 +176,7 @@ class BatteryMonitoringService : Service() {
       val tierMetrics = adaptivePowerTierEngine.evaluate(telemetry, wakeupsThisHour = 0, snapshotsToday = 0)
       val inDoze = dozeModeMonitor.shouldSkipNonEssentialWork()
       val topApps =
-        if (!inDoze && tierMetrics.allowsUsageInspection() && appPowerInspector.hasUsageStatsPermission()) {
+        if (!inDoze && adaptivePowerTierEngine.decision(PowerFeature.USAGE_ANALYSIS, adaptivePowerTierEngine.state.value.sequence, inDoze).allowed && appPowerInspector.hasUsageStatsPermission()) {
           appPowerInspector.collectTopApps(5)
         } else {
           emptyList()
@@ -186,7 +188,7 @@ class BatteryMonitoringService : Service() {
         forceSnapshot = false,
         activeTier = tierMetrics.activeTier, dbBatchIntervalSeconds = tierMetrics.dbBatchIntervalSeconds,
       )
-      if (!inDoze && tierMetrics.allowsUsageInspection() && telemetry.isCharging) {
+      if (!inDoze && adaptivePowerTierEngine.decision(PowerFeature.CYCLE_OBSERVATION, adaptivePowerTierEngine.state.value.sequence, inDoze).allowed && telemetry.isCharging) {
         batteryLifecycleEstimator.evaluateAndLogDailyWhileCharging(
           intentOverride = intent,
           nowMillis = telemetry.timestampMillis,
@@ -224,12 +226,12 @@ class BatteryMonitoringService : Service() {
       }
 
       val batteryDao = appDatabase.batteryDao()
-      val lastHourly = batteryDao.getLatestHourlySnapshot()
+      val lastHourly = if (MeasuredPowerBudget.permits(PowerFeature.ROUTINE_HISTORY)) batteryDao.getLatestHourlySnapshot() else null
       val now = telemetry.timestampMillis
       val oneHourMillis = 3_600_000L
 
       // Persist an explicit hourly BatterySnapshot checkpoint when >= 1 hour has elapsed
-      if (telemetry.hasSnapshot && (lastHourly == null || now - lastHourly.timestampMillis >= oneHourMillis)) {
+      if (MeasuredPowerBudget.permits(PowerFeature.ROUTINE_HISTORY) && telemetry.hasSnapshot && (lastHourly == null || now - lastHourly.timestampMillis >= oneHourMillis)) {
         batteryDao.insertSnapshot(
           BatterySnapshot(
             timestampMillis = now,
