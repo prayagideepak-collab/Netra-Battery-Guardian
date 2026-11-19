@@ -4,45 +4,40 @@ import com.example.domain.model.AdaptivePowerTier
 import com.example.domain.model.AppStandbyBucket
 import com.example.domain.model.BatteryTelemetry
 import com.example.domain.model.PowerBudgetMetrics
-import com.example.domain.model.ThermalLevel
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Implements Ultra-Low Power Adaptive Tiers using all 8 required inputs:
- * 1. battery %, 2. charging, 3. OS Battery Saver, 4. thermal status,
- * 5. screen state, 6. foreground/background, 7. standby bucket, 8. network type.
+ * Combines battery, OS Battery Saver, thermal and standby restrictions.
+ * Screen/foreground state adjusts existing refresh intervals. Charging never
+ * overrides a restriction; offline operation does not require a network monitor.
  *
- * Uses hysteresis on both battery thresholds and thermal recovery so tiers never flap.
+ * Battery hysteresis and thermal recovery use independent pure reducers.
+ * Physical-device power and thermal behavior still require measurement.
  */
 @Singleton
 class AdaptivePowerTierEngine @Inject constructor() {
 
   private var currentBatteryTier: AdaptivePowerTier = AdaptivePowerTier.NORMAL
-  private var thermalLatched: Boolean = false
+  private var thermalState = ThermalPolicyState()
 
   @Synchronized
   fun evaluate(
     telemetry: BatteryTelemetry,
     wakeupsThisHour: Int,
     snapshotsToday: Int,
+    elapsedRealtimeMillis: Long = System.nanoTime() / 1_000_000L,
   ): PowerBudgetMetrics {
-    val level = telemetry.levelPercent
-
-    // Battery % + Charging + OS Battery Saver with 2% hysteresis buffer
-    val batteryTier =
-      when {
-        !telemetry.hasLevel -> currentBatteryTier
-        level < 5 -> AdaptivePowerTier.SURVIVAL
-        level <= 6 && currentBatteryTier == AdaptivePowerTier.SURVIVAL -> AdaptivePowerTier.SURVIVAL
-        telemetry.isCharging && level >= 15 -> AdaptivePowerTier.NORMAL
-        level < 15 -> AdaptivePowerTier.CRITICAL
-        level <= 17 && currentBatteryTier == AdaptivePowerTier.CRITICAL -> AdaptivePowerTier.CRITICAL
-        telemetry.osBatterySaverOn -> AdaptivePowerTier.SAVER
-        level <= 30 -> AdaptivePowerTier.SAVER
-        level <= 32 && currentBatteryTier == AdaptivePowerTier.SAVER -> AdaptivePowerTier.SAVER
-        else -> AdaptivePowerTier.NORMAL
+    // Preserve battery-only hysteresis separately from Saver/thermal/system floors.
+    // Charging cannot upgrade a restriction selected by another input.
+    val batteryTier = BatteryModePolicy.reduce(currentBatteryTier, telemetry)
+    val availableBatteryTier =
+      if (!telemetry.hasLevel && batteryTier.ordinal < AdaptivePowerTier.CRITICAL.ordinal) {
+        AdaptivePowerTier.CRITICAL
+      } else {
+        batteryTier
       }
+    val systemRestrictedTier = BatteryModePolicy.systemFloor(availableBatteryTier, telemetry)
 
     // Background + Standby Bucket conservation
     val standbyDegraded =
@@ -51,30 +46,13 @@ class AdaptivePowerTierEngine @Inject constructor() {
           telemetry.standbyBucket == AppStandbyBucket.RESTRICTED)
 
     val preThermalTier =
-      if (standbyDegraded && batteryTier == AdaptivePowerTier.NORMAL) AdaptivePowerTier.SAVER
-      else batteryTier
+      if (standbyDegraded && systemRestrictedTier == AdaptivePowerTier.NORMAL) AdaptivePowerTier.SAVER
+      else systemRestrictedTier
 
-    // Thermal throttling with hysteresis: engages >= 40C / MODERATE, clears < 38C & < MODERATE
-    val thermalHotNow =
-      telemetry.thermalLevel.ordinal >= ThermalLevel.MODERATE.ordinal ||
-        telemetry.healthState == com.example.domain.model.BatteryHealthState.OVERHEAT
-    val thermalClearNow =
-      telemetry.thermalStatusAvailable && telemetry.thermalLevel == ThermalLevel.NONE &&
-        telemetry.healthState != com.example.domain.model.BatteryHealthState.OVERHEAT
-
-    if (thermalHotNow) thermalLatched = true
-    else if (thermalClearNow) thermalLatched = false
-
-    val finalTier =
-      if (thermalLatched) {
-        when (preThermalTier) {
-          AdaptivePowerTier.NORMAL -> AdaptivePowerTier.SAVER
-          AdaptivePowerTier.SAVER -> AdaptivePowerTier.CRITICAL
-          AdaptivePowerTier.CRITICAL, AdaptivePowerTier.SURVIVAL -> AdaptivePowerTier.SURVIVAL
-        }
-      } else {
-        preThermalTier
-      }
+    thermalState = ThermalModePolicy.reduce(
+      thermalState, telemetry, elapsedRealtimeMillis, THERMAL_RECOVERY_DWELL_MILLIS,
+    )
+    val finalTier = ThermalModePolicy.applyFloor(preThermalTier, thermalState.restriction)
 
     currentBatteryTier = batteryTier
 
@@ -109,9 +87,14 @@ class AdaptivePowerTierEngine @Inject constructor() {
       networkCallsThisHour = 0, // Strictly 100% offline
       snapshotsRecordedToday = snapshotsToday,
       monitoringIntervalSeconds = uiIntervalSec,
-      isThermalThrottled = thermalLatched,
+      isThermalThrottled = thermalState.restriction != ThermalRestriction.NONE,
       dbBatchIntervalSeconds = dbBatchIntervalSec,
       suspendedFeatures = suspendedFeatures,
     )
+  }
+
+  companion object {
+    // Q9-approved experiment parameter, not a measured physical safe-temperature threshold.
+    const val THERMAL_RECOVERY_DWELL_MILLIS = 30_000L
   }
 }

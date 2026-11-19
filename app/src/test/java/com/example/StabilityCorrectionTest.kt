@@ -101,15 +101,19 @@ class StabilityCorrectionTest {
   @Test fun repeatedThermalEvaluationsDoNotRatchetBatteryHysteresis() {
     val engine = AdaptivePowerTierEngine()
     val sample = BatteryTelemetry(levelPercent = 31, thermalLevel = ThermalLevel.MODERATE, thermalStatusAvailable = true)
-    repeat(30) { assertEquals(AdaptivePowerTier.SAVER, engine.evaluate(sample, 0, 0).activeTier) }
-    assertEquals(AdaptivePowerTier.NORMAL, engine.evaluate(sample.copy(thermalLevel = ThermalLevel.NONE), 0, 0).activeTier)
+    repeat(30) { assertEquals(AdaptivePowerTier.SAVER, engine.evaluate(sample, 0, 0, it.toLong()).activeTier) }
+    val clear = sample.copy(thermalLevel = ThermalLevel.NONE)
+    assertTrue(engine.evaluate(clear, 0, 0, 1_000).isThermalThrottled)
+    assertEquals(AdaptivePowerTier.NORMAL, engine.evaluate(clear, 0, 0, 31_000).activeTier)
   }
   @Test fun unavailableThermalStatusDoesNotClearALatchedWarning() {
     val engine = AdaptivePowerTierEngine()
     val sample = BatteryTelemetry(levelPercent = 80, thermalLevel = ThermalLevel.MODERATE, thermalStatusAvailable = true)
-    assertTrue(engine.evaluate(sample, 0, 0).isThermalThrottled)
-    assertTrue(engine.evaluate(sample.copy(thermalLevel = ThermalLevel.NONE, thermalStatusAvailable = false, temperatureCelsius = Float.NaN), 0, 0).isThermalThrottled)
-    assertFalse(engine.evaluate(sample.copy(thermalLevel = ThermalLevel.NONE), 0, 0).isThermalThrottled)
+    assertTrue(engine.evaluate(sample, 0, 0, 0).isThermalThrottled)
+    assertTrue(engine.evaluate(sample.copy(thermalLevel = ThermalLevel.NONE, thermalStatusAvailable = false, temperatureCelsius = Float.NaN), 0, 0, 1_000).isThermalThrottled)
+    val clear = sample.copy(thermalLevel = ThermalLevel.NONE)
+    assertTrue(engine.evaluate(clear, 0, 0, 2_000).isThermalThrottled)
+    assertFalse(engine.evaluate(clear, 0, 0, 32_000).isThermalThrottled)
   }
   @Test fun storageScanCooldownHotLowUnknownAndCancellation() {
     val cache = File(app.cacheDir, "cooldown").apply { writeBytes(ByteArray(1024)) }
