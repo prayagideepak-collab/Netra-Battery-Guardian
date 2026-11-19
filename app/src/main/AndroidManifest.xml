@@ -84,15 +84,14 @@
             android:name=".service.BatteryThresholdTtsService"
             android:exported="false" />
 
-        <!-- Boot receiver with Direct Boot awareness for WorkManager recovery -->
+        <!-- Credential-backed work starts only after user unlock. -->
         <receiver
             android:name=".service.BootCompletedReceiver"
-            android:directBootAware="true"
+            android:directBootAware="false"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
