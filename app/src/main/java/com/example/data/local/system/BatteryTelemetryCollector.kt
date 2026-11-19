@@ -105,9 +105,10 @@ class BatteryTelemetryCollector @Inject constructor(
         null
       }
 
+    val thermalStatus = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) runCatching { powerManager?.currentThermalStatus }.getOrNull() else null
     val thermalLevel =
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && powerManager != null) {
-        when (powerManager.currentThermalStatus) {
+      if (thermalStatus != null) {
+        when (thermalStatus) {
           PowerManager.THERMAL_STATUS_LIGHT -> ThermalLevel.LIGHT
           PowerManager.THERMAL_STATUS_MODERATE -> ThermalLevel.MODERATE
           PowerManager.THERMAL_STATUS_SEVERE -> ThermalLevel.SEVERE
@@ -150,6 +151,7 @@ class BatteryTelemetryCollector @Inject constructor(
       healthState = healthState,
       technology = technology,
       thermalLevel = thermalLevel,
+      thermalStatusAvailable = thermalStatus != null,
       osBatterySaverOn = osBatterySaverOn,
       screenOn = screenOn,
       screenBrightnessPercent = brightnessPercent,

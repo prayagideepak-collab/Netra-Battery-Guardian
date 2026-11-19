@@ -11,7 +11,7 @@ object PowerGovernanceRegistry {
   val tierZeroFunctions: List<TierZeroItem> = listOf(
     TierZeroItem(
       id = "T0-THERMAL",
-      name = "Critical Thermal Safety (>=40°C Cooling / >=46°C Urgent)",
+      name = "OS-reported Thermal Safety",
       description = "Must operate 24/7 at any battery level via event-driven battery broadcasts.",
     ),
     TierZeroItem(
@@ -76,7 +76,7 @@ object PowerGovernanceRegistry {
     ),
     FeaturePowerGate(
       featureName = "Thermal Threshold Broadcast Monitor (ACTION_BATTERY_CHANGED)",
-      runsInTier = "Tier-0 Urgent >=43C in Critical/Survival; >=40C in Normal/Saver",
+      runsInTier = "OS thermal status and battery-health alerts remain essential",
       maxWakeupsPerHour = 0,
       networkCallsPerHour = 0,
       measuredImpact = "Unavailable: not measured on this device",
@@ -153,7 +153,7 @@ object PowerGovernanceRegistry {
     ),
     FeaturePowerGate(
       featureName = "Background Thermal Safety Worker (BatteryManager -> Room)",
-      runsInTier = "Tier-0 Safety (30m WorkManager; DB write only on critical >=45°C)",
+      runsInTier = "Tier-0 Safety (30m WorkManager; OS thermal/health warnings)",
       maxWakeupsPerHour = 2,
       networkCallsPerHour = 0,
       measuredImpact = "Unavailable: not measured on this device",
@@ -166,7 +166,7 @@ object PowerGovernanceRegistry {
       measuredImpact = "Unavailable: not measured on this device",
     ),
     FeaturePowerGate(
-      featureName = "Battery Threshold TTS Service (80% Charge & Low Battery)",
+      featureName = "Battery Threshold TTS Service (5% milestones)",
       runsInTier = "Event-Driven Threshold Crossing Only (Auto-stopSelf after utterance)",
       maxWakeupsPerHour = 0,
       networkCallsPerHour = 0,

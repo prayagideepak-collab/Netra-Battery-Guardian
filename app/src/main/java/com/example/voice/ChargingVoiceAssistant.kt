@@ -34,7 +34,7 @@ data class ChargingAssistantState(
  * - Lazily initializes [TextToSpeech] only when an eligible announcement triggers.
  * - Releases/shuts down the TTS engine automatically after a brief idle window so no
  *   persistent TTS service binder consumes memory or battery.
- * - Battery milestone announcements strictly trigger ONLY while charging AND screen is on.
+ * - Battery milestones respect voice/direction and screen-off preferences.
  */
 @Singleton
 class ChargingVoiceAssistant @Inject constructor(
@@ -49,6 +49,17 @@ class ChargingVoiceAssistant @Inject constructor(
   private val lastSpokenByKey = mutableMapOf<String, Long>()
   private var currentLocaleLang: AppLanguage? = null
   private var pendingUtterance: PendingUtterance? = null
+  private val durableMilestones = context.getSharedPreferences("guardian_voice_milestones_v1", Context.MODE_PRIVATE)
+  private val inFlight = mutableMapOf<String, PendingUtterance>()
+
+  @Synchronized
+  fun observeBatteryDirection(isCharging: Boolean, isPlugged: Boolean) {
+    val direction = if (isCharging && isPlugged) "charging" else if (!isPlugged) "discharging" else "paused"
+    if (durableMilestones.getString("direction", null) != direction) {
+      durableMilestones.edit().clear().putString("direction", direction).commit()
+      lastSpokenByKey.keys.removeAll { it.startsWith("milestone_") }
+    }
+  }
 
   private val mainHandler = Handler(Looper.getMainLooper())
   private val autoShutdownRunnable = Runnable { shutdown() }
@@ -75,11 +86,15 @@ class ChargingVoiceAssistant @Inject constructor(
             }
 
             override fun onDone(utteranceId: String?) {
+              synchronized(this@ChargingVoiceAssistant) { inFlight.remove(utteranceId) }
               scheduleIdleShutdown()
             }
 
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
+              synchronized(this@ChargingVoiceAssistant) { inFlight.remove(utteranceId) }?.let {
+                postFallbackNotification(it.urgent, it.fallbackTitle, it.message)
+              }
               scheduleIdleShutdown()
             }
           }
@@ -235,7 +250,7 @@ class ChargingVoiceAssistant @Inject constructor(
 
   /**
    * Announces a charging battery milestone (e.g., reached 80% charge) using minimal TTS resources.
-   * Strictly only triggers when [isCharging] is true AND [screenOn] is true.
+   * Triggers while charging, respecting the screen-off preference.
    */
   fun announceChargingMilestone(
     level: Int,
@@ -243,7 +258,7 @@ class ChargingVoiceAssistant @Inject constructor(
     screenOn: Boolean,
     isCharging: Boolean = true,
   ) {
-    if (!isCharging || !screenOn) {
+    if (!isCharging || (!screenOn && !prefs.announceWhileScreenOff)) {
       _assistantState.update {
         it.copy(
           lastSkippedReason = if (!isCharging) "Skipped: not charging" else "Skipped: screen off",
@@ -275,7 +290,7 @@ class ChargingVoiceAssistant @Inject constructor(
       prefs = prefs,
       urgent = isFull,
       bypassNightSilent = isFull,
-      bypassScreenOffRule = false,
+      bypassScreenOffRule = prefs.announceWhileScreenOff,
       screenOn = screenOn,
       fallbackTitle = "Netra Charge $code",
       milestoneLevel = level,
@@ -285,7 +300,7 @@ class ChargingVoiceAssistant @Inject constructor(
   fun announceDischargingMilestone(level: Int, prefs: UserPreferences, screenOn: Boolean) {
     if (!prefs.announceDischarging) return
     val isUrgentLow = level <= 5
-    if (isNightSilentActive(prefs)) return
+    if (isNightSilentActive(prefs) && !isUrgentLow) return
 
     val code = "D$level"
     val text =
@@ -309,8 +324,8 @@ class ChargingVoiceAssistant @Inject constructor(
       message = text,
       prefs = prefs,
       urgent = level <= 15,
-      bypassNightSilent = false,
-      bypassScreenOffRule = level <= 5,
+      bypassNightSilent = isUrgentLow,
+      bypassScreenOffRule = isUrgentLow || prefs.announceWhileScreenOff,
       screenOn = screenOn,
       fallbackTitle = "Netra Battery $code",
       milestoneLevel = level,
@@ -387,10 +402,12 @@ class ChargingVoiceAssistant @Inject constructor(
 
     if (skipForPlayback()) return
 
+    if (milestoneLevel != null && durableMilestones.getBoolean(key, false)) return
     val now = System.currentTimeMillis()
     val last = lastSpokenByKey[key] ?: 0L
     if (now - last < 30_000L) return
     lastSpokenByKey[key] = now
+    if (milestoneLevel != null) durableMilestones.edit().putBoolean(key, true).commit()
 
     _assistantState.update {
       it.copy(
@@ -407,6 +424,8 @@ class ChargingVoiceAssistant @Inject constructor(
     }
 
     if (tts == null || !isReady) {
+      val previous = pendingUtterance
+      if (previous != null) postFallbackNotification(previous.urgent, previous.fallbackTitle, previous.message)
       pendingUtterance = PendingUtterance(key, message, prefs, urgent, fallbackTitle)
       ensureInitialized()
       if (initFailed) {
@@ -441,8 +460,11 @@ class ChargingVoiceAssistant @Inject constructor(
         putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, prefs.voiceVolume.coerceIn(0f, 1f))
       }
     val queueMode = if (urgent) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
-    val result = engine.speak(message, queueMode, params, key)
+    if (inFlight.size >= 32) inFlight.clear()
+    inFlight[key] = PendingUtterance(key, message, prefs, urgent, fallbackTitle)
+    val result = runCatching { engine.speak(message, queueMode, params, key) }.getOrDefault(TextToSpeech.ERROR)
     if (result == TextToSpeech.ERROR) {
+      inFlight.remove(key)
       postFallbackNotification(urgent, fallbackTitle, message)
     }
     scheduleIdleShutdown()
@@ -467,6 +489,7 @@ class ChargingVoiceAssistant @Inject constructor(
   fun shutdown() {
     mainHandler.removeCallbacks(autoShutdownRunnable)
     pendingUtterance = null
+    inFlight.clear()
     runCatching {
       tts?.stop()
       tts?.shutdown()

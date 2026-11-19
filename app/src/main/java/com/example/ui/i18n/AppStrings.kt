@@ -81,14 +81,14 @@ class AppStrings(private val language: AppLanguage) {
   fun zoneLabel(zone: TemperatureZone): String =
     when (zone) {
       TemperatureZone.UNAVAILABLE -> "Unavailable"
-      TemperatureZone.TOO_COLD -> if (isHindi) "बहुत ठंडा (<0°C)" else "Too Cold (<0°C)"
-      TemperatureZone.COLD -> if (isHindi) "ठंडा (0–15°C)" else "Cold (0–15°C)"
-      TemperatureZone.NORMAL -> if (isHindi) "सामान्य (16–35°C)" else "Ideal / Normal"
-      TemperatureZone.WARM -> if (isHindi) "हल्का गर्म (36–39°C)" else "Warm"
-      TemperatureZone.HOT -> if (isHindi) "गर्म (40–42°C)" else "Hot • Cooling Active"
-      TemperatureZone.VERY_HOT -> if (isHindi) "बहुत गर्म (43–45°C)" else "Very Hot"
-      TemperatureZone.CRITICAL -> if (isHindi) "गंभीर तापमान (46–49°C)" else "Critical Heat"
-      TemperatureZone.EMERGENCY -> if (isHindi) "आपातकालीन (50°C+)" else "Emergency (50°C+)"
+      TemperatureZone.TOO_COLD -> if (isHindi) "बहुत ठंडा" else "Too Cold"
+      TemperatureZone.COLD -> if (isHindi) "ठंडा" else "Cold"
+      TemperatureZone.NORMAL -> if (isHindi) "सामान्य" else "Ideal / Normal"
+      TemperatureZone.WARM -> if (isHindi) "हल्का गर्म" else "Warm"
+      TemperatureZone.HOT -> if (isHindi) "गर्म" else "Hot • Cooling Active"
+      TemperatureZone.VERY_HOT -> if (isHindi) "बहुत गर्म" else "Very Hot"
+      TemperatureZone.CRITICAL -> if (isHindi) "गंभीर तापमान" else "Critical Heat"
+      TemperatureZone.EMERGENCY -> if (isHindi) "आपातकालीन" else "Emergency"
     }
 
   fun thermalLabel(thermal: ThermalLevel): String =

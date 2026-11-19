@@ -103,23 +103,31 @@ class StorageAuditWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, params) {
 
   override suspend fun doWork(): Result {
-    if (dozeModeMonitor.shouldSkipNonEssentialWork()) return Result.success()
     val prefs = preferencesRepository.preferences.first()
     val telemetry = telemetryCollector.collect(
       observedCapacityFallbackMah = prefs.observedCapacityMah,
       isAppInForeground = false,
     )
 
-    // Skip heavy storage work if hot >=40°C or battery <15%
-    if (!telemetry.hasTemperature || !telemetry.hasLevel || telemetry.temperatureCelsius >= 40f || telemetry.levelPercent < 15) {
-      return Result.success()
+    var lastCheck = -1L
+    var conditionsAllowed = false
+    fun mayContinue(): Boolean {
+      if (isStopped) return false
+      val elapsed = android.os.SystemClock.elapsedRealtime()
+      if (lastCheck < 0L || elapsed - lastCheck >= 1_000L) {
+        lastCheck = elapsed
+        conditionsAllowed = StorageInspector.maintenanceAllowed(telemetryCollector.collect(isAppInForeground = false))
+      }
+      return conditionsAllowed
     }
+    if (!StorageInspector.maintenanceAllowed(telemetry) || !mayContinue()) return Result.success()
 
     // Run StorageStatsManager app-specific disk scan strictly in this idle maintenance window
     val diskReport = diskUsageHelper.scanAppStorageIfIdle(
       fromIdleWorker = true,
       temperatureCelsius = telemetry.temperatureCelsius,
       batteryPercent = telemetry.levelPercent,
+      shouldContinue = ::mayContinue,
     )
     if (diskReport.executedDuringIdleWindow && diskReport.heavyAppFiles.isNotEmpty()) {
       val topHeavy = diskReport.heavyAppFiles.first()
@@ -135,9 +143,10 @@ class StorageAuditWorker @AssistedInject constructor(
       )
     }
 
-    val insight = storageInspector.inspect(telemetry.temperatureCelsius, telemetry.levelPercent)
+    if (!mayContinue()) return Result.success()
+    val insight = storageInspector.inspect(telemetry.temperatureCelsius, telemetry.levelPercent, shouldContinue = ::mayContinue)
     if (insight.appOwnCacheBytes > 100L * 1024L * 1024L) {
-      val freed = storageInspector.cleanOwnCache()
+      val freed = storageInspector.cleanOwnCache(::mayContinue)
       if (freed > 0L) {
         historyRepository.logActivity(
           category = LogCategory.STORAGE,

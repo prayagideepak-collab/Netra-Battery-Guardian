@@ -33,6 +33,7 @@ import com.example.domain.engine.DozeEfficiencyMetrics
 import com.example.domain.engine.HeatingDiagnosisEngine
 import com.example.domain.engine.OptimizerActionTarget
 import com.example.domain.engine.SelfHealingSupervisor
+import com.example.domain.model.allowsUsageInspection
 import com.example.domain.model.AdaptivePowerTier
 import com.example.domain.model.AppLanguage
 import com.example.domain.model.AppPowerInsight
@@ -135,6 +136,8 @@ class MainViewModel @Inject constructor(
 
   private val _isUiVisible = MutableStateFlow(false)
   val isUiVisible: StateFlow<Boolean> = _isUiVisible.asStateFlow()
+
+  private val refreshEvents = com.example.service.BatteryEventQueue<Intent?>(viewModelScope, { com.example.service.batteryEventKey(it) }) { intent, force -> refreshObserved(intent, force) }
 
   private var wakeupsThisHour = 0
   private var wakeupHourBucket = currentHourBucket()
@@ -304,7 +307,10 @@ class MainViewModel @Inject constructor(
   }
 
   fun refreshNow(intentOverride: Intent? = null, forceSnapshot: Boolean = false) {
-    viewModelScope.launch {
+    refreshEvents.submit(intentOverride?.let { Intent(it) }, forceSnapshot)
+  }
+
+  private suspend fun refreshObserved(intentOverride: Intent?, forceSnapshot: Boolean) = withContext(Dispatchers.Default) {
       val prefs = preferencesRepository.preferences.first()
       val bucket = currentHourBucket()
       if (bucket != wakeupHourBucket) {
@@ -327,7 +333,7 @@ class MainViewModel @Inject constructor(
       val hasUsage = appPowerInspector.hasUsageStatsPermission()
       val topApps =
         withContext(Dispatchers.Default) {
-          if (!inDoze && hasUsage && powerBudget.activeTier != AdaptivePowerTier.SURVIVAL) {
+          if (!inDoze && hasUsage && powerBudget.allowsUsageInspection()) {
             appPowerInspector.collectTopApps()
           } else {
             emptyList()
@@ -338,9 +344,9 @@ class MainViewModel @Inject constructor(
         prefs = prefs,
         topApps = topApps,
         forceSnapshot = forceSnapshot,
-        dbBatchIntervalSeconds = powerBudget.dbBatchIntervalSeconds,
+        activeTier = powerBudget.activeTier, dbBatchIntervalSeconds = powerBudget.dbBatchIntervalSeconds,
       )
-      if (!inDoze && telemetry.isCharging) {
+      if (!inDoze && powerBudget.allowsUsageInspection() && telemetry.isCharging) {
         batteryLifecycleEstimator.evaluateAndLogDailyWhileCharging(
           intentOverride = intentOverride,
           nowMillis = telemetry.timestampMillis,
@@ -361,7 +367,7 @@ class MainViewModel @Inject constructor(
       val storageInsight =
         if (!inDoze) {
           withContext(Dispatchers.IO) {
-            storageInspector.inspect(telemetry.temperatureCelsius, telemetry.levelPercent)
+            storageInspector.inspect(telemetry.temperatureCelsius, telemetry.levelPercent, allowDirectoryScan = false)
           }
         } else {
           _uiState.value.storageInsight
@@ -393,7 +399,6 @@ class MainViewModel @Inject constructor(
           isNightSilentActive = voiceAssistant.isNightSilentActive(prefs),
         )
       }
-    }
   }
 
   // Quick actions & profile controls

@@ -100,6 +100,7 @@ fun BatteryScreen(
         chargingDiagnosis = diag,
         historySnapshots = if (state.snapshots24h.isNotEmpty()) state.snapshots24h else state.hourlySnapshots,
         isHindi = strings.isHindi,
+        animationsAllowed = state.powerBudget.activeTier != com.example.domain.model.AdaptivePowerTier.SURVIVAL,
       )
     }
 

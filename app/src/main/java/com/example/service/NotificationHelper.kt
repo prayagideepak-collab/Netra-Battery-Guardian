@@ -28,6 +28,7 @@ class NotificationHelper @Inject constructor(
     const val CHANNEL_CRITICAL = "netra_critical"
 
     const val ID_GUARDIAN_SERVICE = 1001
+    const val ID_MONITORING_SERVICE = 1007
     const val ID_CHARGING_ADVISORY = 1002
     const val ID_THERMAL_ALERT = 1003
     const val ID_DRAIN_ALERT = 1004
