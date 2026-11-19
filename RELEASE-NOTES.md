@@ -1,10 +1,30 @@
-# Netra Battery Guardian 1.0.2
+# Netra Battery Guardian 1.0.3
 
-Incremental test release containing approved PRs #12 through #18. Charging #19
-and health/Bluetooth #20 are NOT included. Package
-`com.aistudio.netrabattery.kxmzqr`, versionCode 3, minimum Android API 24.
+Combined test release containing approved PRs #12 through #20. Package
+`com.aistudio.netrabattery.kxmzqr`, versionCode 4, minimum Android API 24.
 
-## Changes
+## Changes since 1.0.2
+
+- Charging type uses observed Android ENERGY_COUNTER changes over elapsed time,
+  not voltage times current or claimed charger-output watts. Missing, unsupported,
+  stale, invalid or insufficient evidence remains Unavailable. Existing signed
+  battery-side electrical telemetry and observed-level ETA stay separate.
+- Charging-type phrases are short type-only text with a separate default-ON
+  setting that preserves saved OFF. IMPORTANT: ordinary charging-type speech
+  remains budget-deferred in every mode. This release does not enable it without
+  a verified measured budget. Existing essential start/stop/full speech ownership
+  remains unchanged; no Bluetooth device speech is added.
+- Android Battery Observations shows the OS health category and independently
+  available temperature, voltage, cycle count and remaining-charge counter.
+  Unknown is Unavailable, not Good. Health percentage stays Unavailable without
+  verified full-charge/design-capacity evidence, no invented health score.
+- Foreground accessory reads enforce the central missing-budget deferral in
+  both UI and monitor. Missing accessory values are Unavailable; RSSI is a signal
+  estimate, not distance or connection-stability prediction. Last-refresh labels
+  remain, and older read expiration cannot clear a newer read. No scanning,
+  permission, background sampler or Bluetooth speech is added.
+
+## Retained from 1.0.2
 
 - Shared process-local power policy, conservative battery-mode hysteresis and
   OS-thermal restriction/recovery decisions. Charging does not cancel low-battery
@@ -39,8 +59,8 @@ Android 17 runtime, power-loss durability and drain measurements are NOT RUN.
 
 This is not completion of Power V2 or M3 recovery. Episode state remains
 process-local. Cross-session transaction/recovery work, finite measured budgets,
-full feature-matrix acceptance and measured savings remain unfinished. Charging
-speech is not newly delivered; charging #19 and health/Bluetooth #20 stay excluded.
+full feature-matrix acceptance and measured savings remain unfinished. Ordinary charging-type
+speech remains budget-deferred despite the setting; no measured budget is added.
 No guaranteed cooling, zero battery impact, stable-phone certification or Android
 OS security-patch claim is made. Keep Play Protect ON.
 
