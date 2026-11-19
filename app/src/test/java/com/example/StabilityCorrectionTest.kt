@@ -124,6 +124,33 @@ class StabilityCorrectionTest {
     assertEquals("keep", database.readText())
     database.delete()
   }
+  @Test fun ownCacheThresholdAndSymlinkBoundaryAreMeasured() {
+    val inspector = StorageInspector(app).apply { scanCooldownMillis = 0 }
+    val big = File(app.cacheDir, "threshold.bin")
+    java.io.RandomAccessFile(big, "rw").use { it.setLength(99L * 1024 * 1024) }
+    assertTrue(inspector.inspect(30f, 80).appOwnCacheBytes < 100L * 1024 * 1024)
+    java.io.RandomAccessFile(big, "rw").use { it.setLength(101L * 1024 * 1024) }
+    assertTrue(inspector.inspect(30f, 80).appOwnCacheBytes > 100L * 1024 * 1024)
+    val protected = File(app.filesDir, "protected.txt").apply { writeText("keep") }
+    val link = File(app.cacheDir, "outside-link")
+    java.nio.file.Files.createSymbolicLink(link.toPath(), protected.toPath())
+    assertTrue(inspector.cleanOwnCache() >= 101L * 1024 * 1024)
+    assertEquals("keep", protected.readText())
+    link.delete(); protected.delete()
+  }
+  @Test fun eventProcessorFailureDoesNotKillLaterEventsAndCancellationStopsIt() = runBlocking {
+    val job = SupervisorJob()
+    val scope = CoroutineScope(job + Dispatchers.Unconfined)
+    val seen = mutableListOf<Int>()
+    val queue = BatteryEventQueue<Int>(scope, { it }) { value, _ ->
+      if (value == 1) error("fixture failure")
+      seen.add(value)
+    }
+    queue.submit(1); queue.submit(2)
+    assertEquals(listOf(2), seen)
+    job.cancel(); queue.submit(3); yield()
+    assertEquals(listOf(2), seen)
+  }
   @Test fun maintenanceThresholdAndTierGatesStayConservative() {
     val t = BatteryTelemetry(levelPercent = 80, temperatureCelsius = 30f, healthState = BatteryHealthState.GOOD)
     assertTrue(StorageInspector.maintenanceAllowed(t))
@@ -160,6 +187,29 @@ class StabilityCorrectionTest {
     assertEquals(listOf(100, 95, 90, 85), values.map { it.first })
     assertTrue(values.single { it.first == 90 }.second)
     scope.cancel()
+  }
+  @Test fun sharedRulesDeduplicateSameEventAcrossConsumersWithoutTouchingCache() = runBlocking {
+    val db = androidx.room.Room.inMemoryDatabaseBuilder(app, com.example.data.local.db.AppDatabase::class.java).allowMainThreadQueries().build()
+    val voice = assistant()
+    val collector = BatteryTelemetryCollector(app)
+    val preferences = com.example.data.local.prefs.PreferencesRepository(app)
+    val engine = com.example.domain.engine.AutomationRulesEngine(
+      com.example.domain.engine.TemperatureControlEngine(),
+      com.example.domain.engine.ChargingSpeedClassifier(),
+      com.example.data.repository.BatteryHistoryRepository(db.netraDao(), db.batteryDao()),
+      preferences, collector, StorageInspector(app), voice, NotificationHelper(app),
+      com.example.service.DozeModeMonitor(app, BoundedLogFileWriter(app), db),
+    )
+    val cached = File(app.cacheDir, "must-remain").apply { writeText("keep") }
+    val t = BatteryTelemetry(timestampMillis = 1_700_000_000_000L, levelPercent = 60, temperatureCelsius = 30f, voltageMv = 4000)
+    val first = engine.evaluate(t, prefs, emptyList())
+    val logCount = db.netraDao().getAllLogsForExport().size
+    val duplicate = engine.evaluate(t.copy(timestampMillis = t.timestampMillis + 100, isAppInForeground = false), prefs, emptyList())
+    assertSame(first, duplicate)
+    assertEquals(logCount, db.netraDao().getAllLogsForExport().size)
+    assertEquals(1, db.netraDao().getSnapshotsSince(0).size)
+    assertEquals("keep", cached.readText())
+    voice.shutdown(); db.close()
   }
   @Test fun bluetoothNeverTurnsMissingSignalGreenAndDenialIsSafe() {
     assertEquals("Unavailable", bluetoothSignalLabel(null))

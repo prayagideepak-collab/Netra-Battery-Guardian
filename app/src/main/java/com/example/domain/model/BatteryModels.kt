@@ -187,7 +187,7 @@ data class BatteryTelemetry(
   val healthState: BatteryHealthState = BatteryHealthState.UNKNOWN,
   val technology: String = "Unavailable",
   val thermalLevel: ThermalLevel = ThermalLevel.NONE,
-  val thermalStatusAvailable: Boolean = true,
+  val thermalStatusAvailable: Boolean = false,
   val osBatterySaverOn: Boolean = false,
   val screenOn: Boolean = true,
   val screenBrightnessPercent: Int = -1,

@@ -37,6 +37,7 @@ class UltraLowPowerComplianceTest {
       isCharging = true,
       osBatterySaverOn = false,
       thermalLevel = ThermalLevel.NONE,
+      thermalStatusAvailable = true,
       temperatureCelsius = 28f,
       screenOn = true,
       isAppInForeground = true,

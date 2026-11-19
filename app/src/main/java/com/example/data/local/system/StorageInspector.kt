@@ -169,7 +169,7 @@ class StorageInspector @Inject constructor(
     var freed = 0L
     for (root in listOfNotNull(context.cacheDir, context.externalCacheDir)) {
       if (!shouldContinue()) break
-      if (File(root.parentFile.canonicalFile, root.name) != root.canonicalFile) continue
+      if (runCatching { File(root.parentFile.canonicalFile, root.name) != root.canonicalFile }.getOrDefault(true)) continue
       val before = runCatching { directorySize(root, shouldContinue) }.getOrNull() ?: continue
       runCatching { deleteChildren(root, root.canonicalFile, shouldContinue) }
       val after = runCatching { directorySize(root, shouldContinue) }.getOrNull() ?: continue
