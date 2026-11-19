@@ -35,6 +35,13 @@ class StabilityCorrectionTest {
   private fun assistant() = ChargingVoiceAssistant(app, NotificationHelper(app))
   private val prefs = UserPreferences(voiceEnabled = true, announceCharging = true, announceDischarging = true, nightSilentEnabled = false)
 
+  @Test fun collectorMarksCollectionStartNotBroadcastOriginAge() {
+    val before = System.nanoTime() / 1_000_000L
+    val sample = BatteryTelemetryCollector(app).collect()
+    val after = System.nanoTime() / 1_000_000L
+    assertTrue(sample.collectionStartedElapsedMillis != null)
+    assertTrue(sample.collectionStartedElapsedMillis!! in before..after)
+  }
   @Test @Config(sdk = [28]) fun preAndroidTenHasNoOsThermalStatus() {
     assertFalse(BatteryTelemetryCollector(app).collect().thermalStatusAvailable)
   }
@@ -218,7 +225,7 @@ class StabilityCorrectionTest {
     val t = BatteryTelemetry(timestampMillis = 1_700_000_000_000L, levelPercent = 60, temperatureCelsius = 30f, voltageMv = 4000)
     val first = engine.evaluate(t, prefs, emptyList(), forceSnapshot = true)
     val logCount = db.netraDao().getAllLogsForExport().size
-    val duplicate = engine.evaluate(t.copy(timestampMillis = t.timestampMillis + 100, isAppInForeground = false), prefs, emptyList())
+    val duplicate = engine.evaluate(t.copy(timestampMillis = t.timestampMillis + 100, isAppInForeground = false, collectionStartedElapsedMillis = 200), prefs, emptyList())
     assertSame(first, duplicate)
     assertEquals(logCount, db.netraDao().getAllLogsForExport().size)
     assertEquals(1, db.netraDao().getSnapshotsSince(0).size)

@@ -68,11 +68,11 @@ class AutomationRulesEngine @Inject constructor(
     dbBatchIntervalSeconds: Int = 60,
     activeTier: com.example.domain.model.AdaptivePowerTier = com.example.domain.model.AdaptivePowerTier.NORMAL,
   ): RuleEvaluationOutput = evalMutex.withLock {
-    val normalized = telemetry.copy(timestampMillis = 0L, isAppInForeground = false)
+    val normalized = telemetry.copy(timestampMillis = 0L, isAppInForeground = false, collectionStartedElapsedMillis = null)
     val previous = previousEvent
     if (!forceSnapshot && previous != null && previousPrefs == prefs &&
       telemetry.timestampMillis - previous.timestampMillis in 0..1_000L &&
-      previous.copy(timestampMillis = 0L, isAppInForeground = false) == normalized) {
+      previous.copy(timestampMillis = 0L, isAppInForeground = false, collectionStartedElapsedMillis = null) == normalized) {
       previousOutput?.let { return@withLock it }
     }
     val routineAllowed = MeasuredPowerBudget.permits(PowerFeature.ORDINARY_MILESTONE) && (activeTier == com.example.domain.model.AdaptivePowerTier.NORMAL || activeTier == com.example.domain.model.AdaptivePowerTier.SAVER)

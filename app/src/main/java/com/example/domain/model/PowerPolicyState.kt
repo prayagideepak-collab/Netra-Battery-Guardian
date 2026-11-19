@@ -9,6 +9,7 @@ data class PowerPolicyState(
   val thermalStatusAvailable: Boolean = false,
   val isAppInForeground: Boolean = false,
   val screenOn: Boolean = false,
+  val hasCollectionProvenance: Boolean = false,
   val restrictions: Set<PowerRestriction> = setOf(PowerRestriction.NOT_OBSERVED),
   val metrics: PowerBudgetMetrics? = null,
 )

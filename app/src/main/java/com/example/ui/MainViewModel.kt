@@ -198,6 +198,18 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    // UI sees restrictions published by service/thermal consumers too, without polling.
+    viewModelScope.launch {
+      _isUiVisible.flatMapLatest { visible ->
+        if (visible) adaptivePowerTierEngine.state else emptyFlow()
+      }.collect { policy ->
+        val published = policy.metrics ?: return@collect
+        _uiState.update { state ->
+          state.copy(powerBudget = published.copy(snapshotsRecordedToday = state.powerBudget.snapshotsRecordedToday))
+        }
+      }
+    }
+
     // Refresh Room chart, critical thermal events & session history ONLY while UI is visible (low-power constraint)
     viewModelScope.launch {
       _isUiVisible
@@ -393,7 +405,9 @@ class MainViewModel @Inject constructor(
           chargingDiagnosis = chargingDiag,
           heatReport = heatReport,
           activeProfile = eval.activeProfile,
-          powerBudget = powerBudget,
+          powerBudget = (adaptivePowerTierEngine.state.value.metrics ?: powerBudget).copy(
+            snapshotsRecordedToday = it.powerBudget.snapshotsRecordedToday,
+          ),
           storageInsight = storageInsight,
           optimizationReport = optimizationReport,
           topApps = topApps,
