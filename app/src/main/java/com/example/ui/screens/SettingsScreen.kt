@@ -70,6 +70,7 @@ fun SettingsScreen(
   onExportPdf: () -> Unit,
   onClearAllData: () -> Unit,
   onQueueChargingCsvExport: () -> Unit = {},
+  onSetAnnounceChargingSpeed: (Boolean) -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   val p = state.prefs
@@ -142,6 +143,12 @@ fun SettingsScreen(
         Text(if (strings.isHindi) "वॉइस वॉल्यूम: ${(p.voiceVolume * 100).toInt()}%" else "Voice Volume: ${(p.voiceVolume * 100).toInt()}%")
         Slider(value = p.voiceVolume, onValueChange = onSetVoiceVolume, valueRange = 0.1f..1f)
 
+        SettingToggleRow(
+          label = if (strings.isHindi) "केवल चार्जिंग प्रकार बोलें" else "Charging type announcements",
+          checked = p.announceChargingSpeed,
+          onCheckedChange = onSetAnnounceChargingSpeed,
+        )
+        Text(if (strings.isHindi) "पावर बजट सत्यापित होने तक प्रकार की आवाज़ स्थगित है।" else "Type speech deferred until its power budget is verified.", style = MaterialTheme.typography.bodySmall)
         SettingToggleRow(
           label = if (strings.isHindi) "चार्जिंग घोषणाएँ (C5–C100)" else "Charging Milestones (C5–C100)",
           checked = p.announceCharging,

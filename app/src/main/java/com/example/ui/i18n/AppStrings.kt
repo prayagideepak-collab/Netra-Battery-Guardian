@@ -58,11 +58,12 @@ class AppStrings(private val language: AppLanguage) {
       ChargingSpeedClass.NOT_CHARGING -> if (isHindi) "चार्जिंग नहीं" else "Not Charging"
       ChargingSpeedClass.DISCHARGING_WHILE_PLUGGED ->
         if (isHindi) "चार्जर लगा है पर घट रही है" else "Discharging While Plugged"
-      ChargingSpeedClass.SLOW -> if (isHindi) "धीमी / ट्रिकल चार्जिंग" else "Slow / Trickle"
-      ChargingSpeedClass.STANDARD -> if (isHindi) "सामान्य चार्जिंग" else "Standard Charging"
+      ChargingSpeedClass.SLOW -> if (isHindi) "धीमी चार्जिंग" else "Slow Charging"
+      ChargingSpeedClass.STANDARD -> if (isHindi) "सामान्य चार्जिंग" else "Normal Charging"
       ChargingSpeedClass.FAST -> if (isHindi) "तेज़ चार्जिंग" else "Fast Charging"
       ChargingSpeedClass.SUPER_FAST -> if (isHindi) "सुपर फ़ास्ट" else "Super Fast"
       ChargingSpeedClass.ULTRA_FAST -> if (isHindi) "अल्ट्रा फ़ास्ट" else "Ultra Fast"
+      ChargingSpeedClass.HYPER_FAST -> if (isHindi) "हाइपर फ़ास्ट" else "Hyper Fast"
       ChargingSpeedClass.EXTREME_FAST -> if (isHindi) "एक्सट्रीम फ़ास्ट" else "Extreme Fast"
     }
 

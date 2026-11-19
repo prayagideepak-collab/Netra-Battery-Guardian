@@ -1,33 +1,49 @@
-# Netra Battery Guardian 1.0.1
+# Netra Battery Guardian 1.0.2
 
-Guardian-only device-data correction after the new dashboard update. Package
-`com.aistudio.netrabattery.kxmzqr`, versionCode 2, Android 7.0 (API 24) or newer.
+Incremental test release containing approved PRs #12 through #18. Charging #19
+and health/Bluetooth #20 are NOT included. Package
+`com.aistudio.netrabattery.kxmzqr`, versionCode 3, minimum Android API 24.
 
-- Unsupported numeric readings are blank or omitted. Real zero remains zero.
-- No fixed 4500 mAh fallback, Doze savings formula, battery-health score, inferred
-  wear/design capacity, or invented storage-category percentages.
-- Counter-derived capacity appears only with observed charge counter and battery
-  percentage, labeled approximate. It is not rated or design capacity.
-- Signed battery current and derived battery-side power retain the sensor sign.
-  They do not measure wall-charger input power.
-- Thermal alerts/classifications use Android-reported thermal or overheat states,
-  not a claimed universal 45/46-degree OEM limit. Numeric temperature remains a
-  sensor observation; charts do not invent device safety bands.
-- Storage totals come from filesystem observations. Only Netra cache is attributed;
-  remaining used bytes are unattributed.
-- Session gain updates and database upgrade schema are corrected. Reset clears
-  app-private reports and cancels queued CSV work. CSV text is escaped against
-  spreadsheet formulas. Legacy guessed health fields are not re-exported as facts.
-- Existing night-silent and screen-off voice policy is retained.
+## Changes
+
+- Shared process-local power policy, conservative battery-mode hysteresis and
+  OS-thermal restriction/recovery decisions. Charging does not cancel low-battery
+  or Battery Saver restrictions. The 30-second observed recovery dwell is an
+  approved experiment parameter, not a measured safe-temperature threshold.
+- Optional exports, cache cleanup, routine analyses and animations defer while
+  measured budgets are unavailable. No numeric budget or power saving is invented.
+  Essential warning eligibility still respects permissions, consent and platform rules.
+- Shared policy state and collection-order stamps reduce stale updates. Visible UI
+  subscribes to current state; the timed foreground refresh loop is removed.
+  History charts cache their first populated input until screen re-entry. Entry,
+  OS callback and manual telemetry refresh remain.
+- Shared process-local thermal notification episode ownership deduplicates equal
+  or lower severity, escalates higher severity, and rejects stale clear observations.
+  A notification attempt is not proof Android delivered it.
+- Essential critical-thermal snapshot and activity log commit in one Room
+  transaction. Warning attempts precede persistence; storage failures are not
+  reported as successful saves. Background scheduling requires unlocked storage;
+  pre-unlock Direct Boot startup is removed.
+- Targeted stability corrections serialize/coalesce battery-event work, cache
+  usage-stat reads, bound cache traversal, preserve urgent/milestone paths and
+  distinguish unavailable OS thermal observations. Connected Bluetooth remains
+  readings-only using public APIs, with no device announcements or scanning.
 
 ## Verification and limits
 
-The signed candidate must be read back before publication. Test renders use
-controlled fixtures, not this phone's readings. Physical-phone install/upgrade,
-launcher/widget resizing, background speech routing and document-picker export
-acceptance are NOT RUN. API support varies by phone. No guaranteed cooling,
-battery savings, zero battery impact or Android OS security-patch claim is made.
+Exact-head automated test, lint and debug-build evidence and signed-candidate
+identity/hash readback are publication gates. Test renders use controlled fixtures,
+not this phone's readings. Physical-phone install/upgrade, reboot/Direct Boot,
+launcher/widget resizing, background speech routing, document-picker acceptance,
+Android 17 runtime, power-loss durability and drain measurements are NOT RUN.
+
+This is not completion of Power V2 or M3 recovery. Episode state remains
+process-local. Cross-session transaction/recovery work, finite measured budgets,
+full feature-matrix acceptance and measured savings remain unfinished. Charging
+speech is not newly delivered; charging #19 and health/Bluetooth #20 stay excluded.
+No guaranteed cooling, zero battery impact, stable-phone certification or Android
+OS security-patch claim is made. Keep Play Protect ON.
 
 Uses the established Netra release signing certificate. A prior AI Studio build
-may have a different certificate; Android can require uninstalling it first,
-which can remove local data. No cross-app history import is claimed.
+may use another certificate; Android can require uninstalling that build, which
+can remove local data. No cross-app history import is claimed.

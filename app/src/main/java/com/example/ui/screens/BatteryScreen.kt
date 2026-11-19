@@ -118,13 +118,13 @@ fun BatteryScreen(
           )
           WhyExplainChip(
             label = strings.whyButton,
-            title = if (strings.isHindi) "चार्जिंग स्पीड वर्ग" else "Net Battery Power Formula",
-            explanation = if (strings.isHindi) diag?.whyHi ?: "" else diag?.whyEn ?: "",
+            title = if (strings.isHindi) "चार्जिंग स्पीड वर्ग" else "Charging rate source",
+            explanation = if (strings.isHindi) diag?.explanationHi ?: "" else diag?.explanationEn ?: "",
           )
         }
         if (diag != null) {
           StatusPill(
-            text = "${strings.speedLabel(diag.speedClass)} • ${telemetryText(diag.netPowerWatts, " W")}",
+            text = "${strings.speedLabel(diag.speedClass)} • ${telemetryText(diag.estimatedStoredEnergyRateWatts, " W").ifBlank { "Unavailable" }}\nNet stored-energy rate (estimate)",
             color = SemanticCoolMint,
           )
           Text(

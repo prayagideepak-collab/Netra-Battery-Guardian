@@ -83,6 +83,7 @@ class AutomationRulesEngine @Inject constructor(
     val zone = temperatureEngine.classifyObserved(telemetry)
 
     voiceAssistant.observeBatteryDirection(telemetry.isCharging, telemetry.isPlugged)
+    voiceAssistant.observeChargingSpeed(chargingDiagnosis.speedClass, prefs, telemetry.screenOn, telemetry.collectionStartedElapsedMillis)
 
     // 1. Charger connect / disconnect rules
     val prevPlugged = lastPluggedState
