@@ -36,6 +36,31 @@ class NotificationHelper @Inject constructor(
     const val ID_TTS_FALLBACK = 1006
   }
 
+  private val thermalEpisode = com.example.domain.engine.ThermalNotificationEpisode()
+
+  /** All thermal notification paths share this lock and episode. Voice policy is separate. */
+  @Synchronized
+  fun postThermalObservation(
+    telemetry: com.example.domain.model.BatteryTelemetry,
+    title: String? = null,
+    body: String? = null,
+    critical: Boolean = false,
+  ): Boolean {
+    val canPost = title != null && body != null && hasNotificationPermission() &&
+      NotificationManagerCompat.from(context).areNotificationsEnabled()
+    val claimed = thermalEpisode.observeAndClaim(
+      telemetry,
+      telemetry.collectionStartedElapsedMillis ?: (System.nanoTime() / 1_000_000L),
+      canPost,
+    )
+    if (!claimed) return false
+    createChannels()
+    if (critical) postCriticalAlert(ID_THERMAL_ALERT, title!!, body!!)
+    else postAdvisory(ID_THERMAL_ALERT, title!!, body!!)
+    // Android may still suppress delivery. This records an attempt, never a receipt.
+    return true
+  }
+
   fun createChannels() {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
     val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return

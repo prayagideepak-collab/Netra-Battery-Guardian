@@ -16,6 +16,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,7 +54,12 @@ fun HourlyTempVoltageChart(
   isLowPowerSurvival: Boolean = false,
   modifier: Modifier = Modifier,
 ) {
-  val ordered = remember(snapshots) { snapshots.sortedBy { it.timestampMillis } }
+  val optionalDeferred = !com.example.domain.engine.MeasuredPowerBudget.permits(com.example.domain.model.PowerFeature.USAGE_ANALYSIS)
+  val cachedSnapshots = remember { mutableStateOf(snapshots.toList()) }.also {
+    if (it.value.isEmpty() && snapshots.isNotEmpty()) it.value = snapshots.toList()
+  }.value
+  val displayedSnapshots = if (optionalDeferred) cachedSnapshots else snapshots
+  val ordered = remember(displayedSnapshots) { displayedSnapshots.sortedBy { it.timestampMillis } }
   val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
 
   val tempColor = SemanticWarmAmber
@@ -87,7 +93,9 @@ fun HourlyTempVoltageChart(
         )
       }
       Text(
-        text = if (isLowPowerSurvival) {
+        text = if (optionalDeferred) {
+          if (isHindi) "स्थिर सहेजा इतिहास" else "Saved history: static"
+        } else if (isLowPowerSurvival) {
           if (isHindi) "सर्वाइवल: लाइव रिफ्रेश विराम" else "Survival: static view"
         } else {
           if (isHindi) "केवल दृश्यमान होने पर रिफ्रेश" else "Visible-only sync"

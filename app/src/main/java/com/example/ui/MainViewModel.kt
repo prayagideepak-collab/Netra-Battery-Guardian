@@ -63,8 +63,6 @@ import com.example.voice.ChargingVoiceAssistant
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -73,7 +71,6 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Calendar
@@ -145,7 +142,6 @@ class MainViewModel @Inject constructor(
   private var wakeupHourBucket = currentHourBucket()
   private var isForegroundActive = false
   private var receiverRegistered = false
-  private var foregroundLoopJob: Job? = null
 
   private val liveBatteryReceiver =
     object : BroadcastReceiver() {
@@ -264,18 +260,6 @@ class MainViewModel @Inject constructor(
     }
   }
 
-  private fun startAdaptiveForegroundLoop() {
-    foregroundLoopJob?.cancel()
-    foregroundLoopJob = viewModelScope.launch {
-      while (isActive && isForegroundActive) {
-        val intervalSec = _uiState.value.powerBudget.monitoringIntervalSeconds.coerceIn(15, 180)
-        delay(intervalSec * 1000L)
-        if (isForegroundActive && !dozeModeMonitor.shouldSkipNonEssentialWork()) {
-          refreshNow(intentOverride = null, forceSnapshot = false)
-        }
-      }
-    }
-  }
 
   fun onForegroundStarted() {
     isForegroundActive = true
@@ -285,7 +269,7 @@ class MainViewModel @Inject constructor(
       coolingSensitivity = _uiState.value.prefs.coolingSensitivity,
     )
     registerBatteryReceiver()
-    startAdaptiveForegroundLoop()
+    // No timed optional refresh while measured budgets are unverified.
     refreshNow(intentOverride = null, forceSnapshot = false)
   }
 
@@ -294,8 +278,6 @@ class MainViewModel @Inject constructor(
     isForegroundActive = false
     _isUiVisible.value = false
     thermalMonitor.unregister(ThermalMonitor.OWNER_FOREGROUND_UI)
-    foregroundLoopJob?.cancel()
-    foregroundLoopJob = null
     unregisterBatteryReceiver()
   }
 

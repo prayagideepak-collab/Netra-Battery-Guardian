@@ -59,9 +59,16 @@ fun BatteryTemperatureTrendChart(
   isLowPowerSurvival: Boolean = false,
   modifier: Modifier = Modifier,
 ) {
+  val optionalDeferred = !com.example.domain.engine.MeasuredPowerBudget.permits(com.example.domain.model.PowerFeature.USAGE_ANALYSIS)
+  val cachedSnapshots24h = remember { mutableStateOf(snapshots24h.toList()) }.also {
+    if (it.value.isEmpty() && snapshots24h.isNotEmpty()) it.value = snapshots24h.toList()
+  }.value
+  val cachedSnapshots7d = remember { mutableStateOf(snapshots7d.toList()) }.also {
+    if (it.value.isEmpty() && snapshots7d.isNotEmpty()) it.value = snapshots7d.toList()
+  }.value
   var show7Days by remember { mutableStateOf(false) }
-  val activeSnapshots = remember(show7Days, snapshots24h, snapshots7d) {
-    val raw = if (show7Days) snapshots7d else snapshots24h
+  val activeSnapshots = remember(show7Days, if (optionalDeferred) cachedSnapshots24h else snapshots24h, if (optionalDeferred) cachedSnapshots7d else snapshots7d) {
+    val raw = if (show7Days) { if (optionalDeferred) cachedSnapshots7d else snapshots7d } else { if (optionalDeferred) cachedSnapshots24h else snapshots24h }
     raw.sortedBy { it.timestampMillis }
   }
   val timeFormat = remember(show7Days) {
@@ -85,7 +92,9 @@ fun BatteryTemperatureTrendChart(
           style = MaterialTheme.typography.titleMedium,
         )
         Text(
-          text = if (isLowPowerSurvival) {
+          text = if (optionalDeferred) {
+            if (isHindi) "स्थिर सहेजा इतिहास: पावर बजट सत्यापित नहीं" else "Saved history: power budget unverified"
+          } else if (isLowPowerSurvival) {
             if (isHindi) "सर्वाइवल मोड: स्थिर दृश्य" else "Survival mode: static Room view"
           } else {
             if (isHindi) "स्थानीय Room इतिहास से समय-आधारित ग्राफ़" else "Time-series from offline Room snapshots"

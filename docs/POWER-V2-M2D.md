@@ -1,0 +1,13 @@
+# Power V2 M2d: rendering, refresh and thermal notification ownership
+
+Stacked on PR16, for review only. No merge or release. Approved remaining-M2 preview: Q11 option1, 19 Nov 2026 16:23 IST.
+
+- Rings use the central fail-closed animation budget in every mode. Values remain visible without animation.
+- Both history charts cache their first populated input on screen entry. A later database emission does not replace that chart input while optional budgets are unverified. Changing 24h/7d uses those cached inputs. Leaving/re-entering the screen creates a new view. Empty loading placeholders can accept their first populated history; stored records are not removed. Telemetry entry/OS/manual refresh remains, but manual refresh does not imply a recalculated history chart.
+- Removed the timed foreground refresh loop, its job and lifecycle hooks. No replacement timer or wakeup. Existing OS battery and thermal callbacks, entry refresh and manual refresh remain. The shared essential battery-event queue is retained, not cancelled mid-restoration on UI stop. Invisible database/policy subscriptions already stop in PR16.
+- All three thermal notification producers use one synchronized NotificationHelper episode owner. Same/lower severity cannot repeat after an arbitrary cooldown. Higher OS severity escalates immediately, including an urgent older-collected event; stale clear samples cannot reset newer state. OVERHEAT is at least critical and cannot mask a higher OS severity.
+- Re-arm needs two supported OS NONE observations spanning the approved 30-second dwell, without any intervening observed LIGHT/unknown/overheat/hot report. This is observed-state dwell, not proof of continuously sampled hardware state. No timer is introduced to complete recovery.
+- Missing notification permission does not consume a claim. A claim is a notification attempt, not proof Android delivered it. Channel suppression, permission races and process death remain platform/durability limitations. Episode state is process-local; restart can warn again. Durable recovery is M3, not silently added here.
+- Urgent speech still uses its existing consent, zone-transition, media and call rules. This PR owns notifications, not a new speech policy. Logs and worker snapshot persistence are not claimed deduplicated by the notification gate.
+
+Validation: pure reducer/concurrency tests; Android helper notification and cached-chart tests in CI. Rendered CI images must be inspected before visual readiness. Physical device, drain, Android17 runtime and delivery-under-OEM restrictions NOT RUN. Numeric budgets remain OPEN. Q3 health and Q4 Bluetooth are unchanged. No safety/cooling/savings certification.

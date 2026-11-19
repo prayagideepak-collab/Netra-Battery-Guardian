@@ -251,31 +251,32 @@ class AutomationRulesEngine @Inject constructor(
       coolingStepsHi += "थर्मल निगरानी बढ़ाई गई; बैकग्राउंड सिंक और भारी ऐप्स रोकने की सलाह।"
     }
 
-    if (lastZone != zone) {
-      when (zone) {
+    notificationHelper.postThermalObservation(telemetry)
+    when (zone) {
         TemperatureZone.EMERGENCY -> {
           val msgEn = "Emergency battery temperature ${telemetryText(telemetry.temperatureCelsius, "°C", 1)}! Disconnect charger immediately and power off if heat persists."
           val msgHi = "आपातकालीन बैटरी तापमान ${telemetryText(telemetry.temperatureCelsius, "°C", 1)}! तुरंत चार्जर हटाएँ और फ़ोन बंद करें।"
-          notificationHelper.postCriticalAlert(NotificationHelper.ID_THERMAL_ALERT, "Emergency Heat Alert", msgEn)
-          voiceAssistant.announceThermalSafety("temp_emergency", msgEn, msgHi, msgEn, prefs, urgent = true, screenOn = telemetry.screenOn)
+          notificationHelper.postThermalObservation(telemetry, "Emergency Heat Alert", msgEn, critical = true)
+          if (lastZone != zone) voiceAssistant.announceThermalSafety("temp_emergency", msgEn, msgHi, msgEn, prefs, urgent = true, screenOn = telemetry.screenOn)
         }
         TemperatureZone.CRITICAL -> {
           val msgEn = "Critical battery temperature ${telemetryText(telemetry.temperatureCelsius, "°C", 1)}. Disconnect charger immediately and let phone cool."
           val msgHi = "गंभीर तापमान ${telemetryText(telemetry.temperatureCelsius, "°C", 1)}। तुरंत चार्जर हटाएँ और फ़ोन को ठंडा होने दें।"
-          notificationHelper.postCriticalAlert(NotificationHelper.ID_THERMAL_ALERT, "Critical Temperature Alert", msgEn)
-          voiceAssistant.announceThermalSafety("temp_critical", msgEn, msgHi, msgEn, prefs, urgent = true, screenOn = telemetry.screenOn)
+          notificationHelper.postThermalObservation(telemetry, "Critical Temperature Alert", msgEn, critical = true)
+          if (lastZone != zone) voiceAssistant.announceThermalSafety("temp_critical", msgEn, msgHi, msgEn, prefs, urgent = true, screenOn = telemetry.screenOn)
         }
         TemperatureZone.VERY_HOT -> {
           val msgEn = "Phone is very hot (${telemetryText(telemetry.temperatureCelsius, "°C", 1)}). Strong cooling active; close heavy apps and hotspot."
           val msgHi = "फ़ोन बहुत गर्म है (${telemetryText(telemetry.temperatureCelsius, "°C", 1)})। भारी ऐप्स और हॉटस्पॉट बंद करें।"
-          notificationHelper.postAdvisory(NotificationHelper.ID_THERMAL_ALERT, "Very Hot Device", msgEn)
+          notificationHelper.postThermalObservation(telemetry, "Very Hot Device", msgEn)
         }
         TemperatureZone.HOT -> {
           val msgEn = "Cooling Mode activated at ${telemetryText(telemetry.temperatureCelsius, "°C", 1)}."
-          notificationHelper.postAdvisory(NotificationHelper.ID_THERMAL_ALERT, "Cooling Mode Active", msgEn)
+          notificationHelper.postThermalObservation(telemetry, "Cooling Mode Active", msgEn)
         }
         else -> Unit
       }
+    if (lastZone != zone) {
       if (zone != TemperatureZone.UNAVAILABLE && zone.ordinal >= TemperatureZone.HOT.ordinal || zone == TemperatureZone.TOO_COLD) {
         historyRepository.logActivity(
           category = LogCategory.HEAT,

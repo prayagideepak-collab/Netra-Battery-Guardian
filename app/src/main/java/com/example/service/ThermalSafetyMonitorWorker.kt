@@ -94,6 +94,7 @@ class ThermalSafetyMonitorWorker @AssistedInject constructor(
       isOverheatHealth ||
         isOsCriticalThermal
 
+    notificationHelper.postThermalObservation(telemetry)
     if (!isCriticalTemp) {
       // Safe temperature: avoid extra Room writes to minimize background flash & battery wear
       if (dozeModeMonitor.shouldSkipNonEssentialWork()) {
@@ -150,8 +151,9 @@ class ThermalSafetyMonitorWorker @AssistedInject constructor(
     )
 
     logWriter.append("THERMAL_WORKER", "CRITICAL thermal event logged: $detailEn")
-    notificationHelper.postCriticalAlert(
-      id = NotificationHelper.ID_THERMAL_ALERT,
+    notificationHelper.postThermalObservation(
+      telemetry = telemetry,
+      critical = true,
       title = "Critical Battery Heat ($tempStr)",
       body = if (isChargingNow) {
         "Background monitor detected $tempStr while charging. Unplug charger to prevent battery wear."

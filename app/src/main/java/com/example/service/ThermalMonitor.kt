@@ -57,8 +57,6 @@ class ThermalMonitor @Inject constructor(
   private var sensitivity: CoolingSensitivity = CoolingSensitivity.BALANCED
   private val activeOwners = mutableSetOf<String>()
   private var receiverRegistered = false
-  private var lastAlertTimestampMillis = 0L
-  private var lastAlertZone: TemperatureZone? = null
   private val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
   private var thermalListener: android.os.PowerManager.OnThermalStatusChangedListener? = null
 
@@ -138,51 +136,18 @@ class ThermalMonitor @Inject constructor(
     )
     val zone = temperatureEngine.classifyObserved(telemetry)
 
-    // Hysteresis reset once battery cools comfortably below 38.0°C
-    if (zone == TemperatureZone.UNAVAILABLE) {
-      lastAlertZone = null
-    }
-
-    // A power restriction must not suppress an OS-reported thermal warning.
-    val meetsTierThreshold = zone.ordinal >= TemperatureZone.HOT.ordinal
-    val cooldownMillis = 10 * 60_000L
-    val escalatedZone = lastAlertZone == null || zone.ordinal > lastAlertZone!!.ordinal
-    val cooldownElapsed = now - lastAlertTimestampMillis >= cooldownMillis
-
-    var notifiedTitle = _state.value.lastNotificationTitle
-    var notifiedTime = _state.value.lastNotificationTimeMillis
-    var alerts = _state.value.alertCount
-
-    if (meetsTierThreshold && (escalatedZone || cooldownElapsed)) {
-      val formattedTemp = com.example.domain.model.telemetryText(telemetry.temperatureCelsius, "°C")
-      when (zone) {
-        TemperatureZone.EMERGENCY, TemperatureZone.CRITICAL -> {
-          val title = "Critical Battery Heat ($formattedTemp)"
-          val body = if (telemetry.isPlugged) {
-            "Battery reached $formattedTemp (${powerBudget.activeTier.name} tier). Unplug charger and let device cool."
-          } else {
-            "Battery reached $formattedTemp (${powerBudget.activeTier.name} tier). Pause heavy apps and let device cool."
-          }
-          notificationHelper.postCriticalAlert(NotificationHelper.ID_THERMAL_ALERT, title, body)
-          notifiedTitle = title
-          notifiedTime = now
-          alerts++
-          lastAlertZone = zone
-          lastAlertTimestampMillis = now
-        }
-        TemperatureZone.VERY_HOT, TemperatureZone.HOT -> {
-          val title = "High Battery Temperature ($formattedTemp)"
-          val body = "Thermal warning in ${powerBudget.activeTier.name} tier: battery at $formattedTemp. Android reported thermal stress. Netra can reduce its own work, not control CPU throttling."
-          notificationHelper.postAdvisory(NotificationHelper.ID_THERMAL_ALERT, title, body)
-          notifiedTitle = title
-          notifiedTime = now
-          alerts++
-          lastAlertZone = zone
-          lastAlertTimestampMillis = now
-        }
-        else -> Unit
-      }
-    }
+    val formattedTemp = com.example.domain.model.telemetryText(telemetry.temperatureCelsius, "°C")
+    val warning = zone in setOf(TemperatureZone.HOT, TemperatureZone.VERY_HOT, TemperatureZone.CRITICAL, TemperatureZone.EMERGENCY)
+    val critical = zone == TemperatureZone.CRITICAL || zone == TemperatureZone.EMERGENCY
+    val title = if (critical) "Critical Battery Heat ($formattedTemp)" else "High Battery Temperature ($formattedTemp)"
+    val body = "Android reported thermal stress (${telemetry.thermalLevel.name}, ${telemetry.healthState.name}); battery reading $formattedTemp. " +
+      if (telemetry.isPlugged) "Unplug charger and let device cool." else "Pause heavy apps and let device cool."
+    val attempted = notificationHelper.postThermalObservation(
+      telemetry, title.takeIf { warning }, body.takeIf { warning }, critical,
+    )
+    val notifiedTitle = if (attempted) title else _state.value.lastNotificationTitle
+    val notifiedTime = if (attempted) now else _state.value.lastNotificationTimeMillis
+    val alerts = _state.value.alertCount + if (attempted) 1 else 0
 
     _state.update {
       it.copy(
@@ -192,7 +157,7 @@ class ThermalMonitor @Inject constructor(
         zone = zone,
         activeTier = powerBudget.activeTier,
         isThermalThrottled = powerBudget.isThermalThrottled,
-        lastNotifiedZone = lastAlertZone,
+        lastNotifiedZone = if (attempted) zone else it.lastNotifiedZone,
         lastNotificationTitle = notifiedTitle,
         lastNotificationTimeMillis = notifiedTime,
         alertCount = alerts,
