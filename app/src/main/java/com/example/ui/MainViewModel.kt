@@ -1,5 +1,8 @@
 package com.example.ui
 
+import com.example.domain.engine.MeasuredPowerBudget
+import com.example.domain.model.PowerFeature
+
 import android.app.Application
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -33,7 +36,6 @@ import com.example.domain.engine.DozeEfficiencyMetrics
 import com.example.domain.engine.HeatingDiagnosisEngine
 import com.example.domain.engine.OptimizerActionTarget
 import com.example.domain.engine.SelfHealingSupervisor
-import com.example.domain.model.allowsUsageInspection
 import com.example.domain.model.AdaptivePowerTier
 import com.example.domain.model.AppLanguage
 import com.example.domain.model.AppPowerInsight
@@ -160,6 +162,7 @@ class MainViewModel @Inject constructor(
       telemetryCollector.coolingBrightnessState.collect { brightness -> _uiState.update { it.copy(coolingBrightness = brightness) } }
     }
     viewModelScope.launch {
+      if (!MeasuredPowerBudget.permits(PowerFeature.OPTIONAL_DIAGNOSTIC)) return@launch
       val health = selfHealingSupervisor.runNaturalHealthCheck(triggerSource = "app_launch")
       _uiState.update { it.copy(selfHealingStatus = health) }
     }
@@ -333,7 +336,7 @@ class MainViewModel @Inject constructor(
       val hasUsage = appPowerInspector.hasUsageStatsPermission()
       val topApps =
         withContext(Dispatchers.Default) {
-          if (!inDoze && hasUsage && powerBudget.allowsUsageInspection()) {
+          if (!inDoze && hasUsage && adaptivePowerTierEngine.decision(PowerFeature.USAGE_ANALYSIS, adaptivePowerTierEngine.state.value.sequence, inDoze).allowed) {
             appPowerInspector.collectTopApps()
           } else {
             emptyList()
@@ -346,7 +349,7 @@ class MainViewModel @Inject constructor(
         forceSnapshot = forceSnapshot,
         activeTier = powerBudget.activeTier, dbBatchIntervalSeconds = powerBudget.dbBatchIntervalSeconds,
       )
-      if (!inDoze && powerBudget.allowsUsageInspection() && telemetry.isCharging) {
+      if (!inDoze && adaptivePowerTierEngine.decision(PowerFeature.CYCLE_OBSERVATION, adaptivePowerTierEngine.state.value.sequence, inDoze).allowed && telemetry.isCharging) {
         batteryLifecycleEstimator.evaluateAndLogDailyWhileCharging(
           intentOverride = intentOverride,
           nowMillis = telemetry.timestampMillis,
@@ -461,7 +464,15 @@ class MainViewModel @Inject constructor(
     }
   }
 
+  private fun deferOptionalAction(feature: PowerFeature): Boolean {
+    val decision = adaptivePowerTierEngine.decision(feature, adaptivePowerTierEngine.state.value.sequence, dozeModeMonitor.shouldSkipNonEssentialWork())
+    if (decision.allowed) return false
+    _uiState.update { it.copy(statusMessage = MeasuredPowerBudget.DEFERRED_MESSAGE) }
+    return true
+  }
+
   fun cleanAppOwnCache() {
+    if (deferOptionalAction(PowerFeature.STORAGE_SCAN)) return
     viewModelScope.launch {
       val freed = withContext(Dispatchers.IO) { storageInspector.cleanOwnCache() }
       historyRepository.logActivity(
@@ -620,6 +631,7 @@ class MainViewModel @Inject constructor(
   fun exportCsvReport(destination: android.net.Uri?) = saveReport(destination, false)
 
   fun exportCsvReport() {
+    if (deferOptionalAction(PowerFeature.REPORT_EXPORT)) return
     viewModelScope.launch {
       val result = reportExporter.exportBatteryHealthAndTempCsvIfCharging(
         lookbackDays = _uiState.value.prefs.dataRetentionDays,
@@ -643,6 +655,7 @@ class MainViewModel @Inject constructor(
   }
 
   fun queueChargingCsvExport() {
+    if (deferOptionalAction(PowerFeature.REPORT_EXPORT)) return
     NetraWorkScheduler.scheduleChargingCsvExport(app)
     _uiState.update {
       it.copy(statusMessage = "Scheduled CSV export via WorkManager for next charging window.")
@@ -653,6 +666,7 @@ class MainViewModel @Inject constructor(
 
   private fun saveReport(destination: android.net.Uri?, pdf: Boolean) {
     if (destination == null) return // User cancelled; no report is created or shared.
+    if (deferOptionalAction(PowerFeature.REPORT_EXPORT)) return
     viewModelScope.launch {
       val saved = runCatching {
         withContext(Dispatchers.IO) {

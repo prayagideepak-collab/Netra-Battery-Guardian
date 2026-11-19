@@ -41,6 +41,7 @@ import com.example.ui.NetraUiState
 import com.example.ui.i18n.AppStrings
 import com.example.ui.screens.BatteryScreen
 import com.example.ui.theme.NetraBatteryTheme
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -171,7 +172,7 @@ class OptimizerAndChargingCsvExportTest {
   }
 
   @Test
-  fun `CSV export triggers only when device is charging and includes health and temperature logs`() = runBlocking {
+  fun `CSV export defers even while charging without creating files or changing records`() = runBlocking {
     val now = System.currentTimeMillis()
     db.netraDao().insertBatteryHealthLog(
       BatteryHealthLogEntity(
@@ -204,27 +205,22 @@ class OptimizerAndChargingCsvExportTest {
     assertFalse("CSV export must be blocked while discharging", blocked.exported)
     assertNull(blocked.file)
 
-    // 2. Charging -> MUST export CSV containing HEALTH_LOG and TEMP_SNAPSHOT rows
+    // Charging does not grant the missing measured budget.
     val chargingIntent = Intent(Intent.ACTION_BATTERY_CHANGED).apply {
       putExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_CHARGING)
       putExtra(BatteryManager.EXTRA_PLUGGED, BatteryManager.BATTERY_PLUGGED_AC)
     }
     val exported = exporter.exportBatteryHealthAndTempCsvIfCharging(intentOverride = chargingIntent)
-    assertTrue("CSV export must succeed while charging", exported.exported)
-    assertEquals(1, exported.healthRows)
-    assertEquals(1, exported.snapshotRows)
-    val csvContent = exported.file!!.readText()
-    assertTrue(csvContent.contains("HEALTH_LOG"))
-    assertTrue(csvContent.contains("34.5,,4185,,,"))
-    assertFalse(csvContent.contains("4500"))
-    exporter.clearPrivateReports()
-    assertFalse(exported.file!!.exists())
-    assertTrue(csvContent.contains("TEMP_SNAPSHOT"))
-    assertTrue(csvContent.contains(",76,36.4,4120,"))
+    assertFalse("Missing measured budget must defer while charging too", exported.exported)
+    assertNull(exported.file)
+    assertEquals(com.example.domain.engine.MeasuredPowerBudget.DEFERRED_MESSAGE, exported.skippedReason)
+    assertFalse(java.io.File(context.filesDir, "NetraReports").exists())
+    assertEquals(1, db.netraDao().observeBatteryHealthLogs().first().size)
+    assertEquals(1, db.batteryDao().observeSnapshotsSince(0).first().size)
   }
 
   @Test
-  fun `ChargingCsvExportWorker enforces requiresCharging constraint and exports when plugged`() = runBlocking {
+  fun `ChargingCsvExportWorker completes deferred work without retries or export files`() = runBlocking {
     val req = NetraWorkScheduler.buildChargingCsvExportRequest()
     assertTrue("CSV export worker must require charging", req.workSpec.constraints.requiresCharging())
 
@@ -256,6 +252,22 @@ class OptimizerAndChargingCsvExportTest {
 
     val res = worker.doWork()
     assertEquals(ListenableWorker.Result.success(), res)
+    assertFalse(java.io.File(context.filesDir, "NetraReports").exists())
+  }
+
+  @Test
+  fun directCsvAndPdfEntrypointsCannotCreateUnbudgetedReports() = runBlocking {
+    for (pdf in listOf(false, true)) {
+      var blocked = false
+      try {
+        if (pdf) exporter.exportPdf() else exporter.exportCsv()
+      } catch (expected: IllegalStateException) {
+        blocked = true
+        assertEquals(com.example.domain.engine.MeasuredPowerBudget.DEFERRED_MESSAGE, expected.message)
+      }
+      assertTrue(blocked)
+      assertFalse(java.io.File(context.filesDir, "NetraReports").exists())
+    }
   }
 
   @Test

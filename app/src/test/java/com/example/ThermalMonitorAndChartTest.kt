@@ -145,6 +145,27 @@ class ThermalMonitorAndChartTest {
   }
 
   @Test
+  fun osSevereWarningIsNotSuppressedBySurvivalPowerMode() {
+    val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+    Shadows.shadowOf(pm).setCurrentThermalStatus(android.os.PowerManager.THERMAL_STATUS_SEVERE)
+    val sample = Intent(Intent.ACTION_BATTERY_CHANGED).apply {
+      putExtra(BatteryManager.EXTRA_LEVEL, 3)
+      putExtra(BatteryManager.EXTRA_SCALE, 100)
+      putExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_DISCHARGING)
+      putExtra(BatteryManager.EXTRA_HEALTH, BatteryManager.BATTERY_HEALTH_GOOD)
+    }
+    NotificationHelper(context).createChannels()
+    thermalMonitor.processBatteryIntent(sample)
+    assertEquals(AdaptivePowerTier.SURVIVAL, thermalMonitor.state.value.activeTier)
+    assertEquals(TemperatureZone.VERY_HOT, thermalMonitor.state.value.zone)
+    assertEquals(1, thermalMonitor.state.value.alertCount)
+    thermalMonitor.processBatteryIntent(sample)
+    assertEquals("Same warning within cooldown must not duplicate", 1, thermalMonitor.state.value.alertCount)
+    val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    assertTrue(Shadows.shadowOf(nm).getNotification(NotificationHelper.ID_THERMAL_ALERT) != null)
+  }
+
+  @Test
   fun `HourlyTempVoltageChart displays empty state below two snapshots and Canvas with Room snapshots`() {
     composeTestRule.setContent {
       NetraBatteryTheme {

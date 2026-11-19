@@ -1,5 +1,8 @@
 package com.example.data.local.system
 
+import com.example.domain.engine.MeasuredPowerBudget
+import com.example.domain.model.PowerFeature
+
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -83,6 +86,7 @@ class LocalReportExporter @Inject constructor(
     lookbackDays: Int = 30,
   ): CsvExportResult =
     withContext(Dispatchers.IO) { reportMutex.withLock {
+      if (!MeasuredPowerBudget.permits(PowerFeature.REPORT_EXPORT)) return@withLock CsvExportResult(false, skippedReason = MeasuredPowerBudget.DEFERRED_MESSAGE)
       if (!isDeviceCurrentlyCharging(intentOverride)) {
         logWriter?.append("CSV_EXPORT", "Skipped battery health & temperature CSV export: device is not charging.")
         return@withLock CsvExportResult(
@@ -148,6 +152,7 @@ class LocalReportExporter @Inject constructor(
 
   suspend fun exportCsv(): File =
     withContext(Dispatchers.IO) { reportMutex.withLock {
+      MeasuredPowerBudget.requireOptionalBudget(PowerFeature.REPORT_EXPORT)
       val dir = getReportsDir()
       val file = File(dir, "netra_battery_report_${fileStampFormatter.format(Date())}.csv")
       val snapshots = historyRepository.getSnapshotsSince(System.currentTimeMillis() - 7L * 24L * 3600_000L)
@@ -182,6 +187,7 @@ class LocalReportExporter @Inject constructor(
 
   suspend fun exportPdf(): File =
     withContext(Dispatchers.IO) { reportMutex.withLock {
+      MeasuredPowerBudget.requireOptionalBudget(PowerFeature.REPORT_EXPORT)
       val dir = getReportsDir()
       val file = File(dir, "netra_battery_report_${fileStampFormatter.format(Date())}.pdf")
       val snapshots = historyRepository.getSnapshotsSince(System.currentTimeMillis() - 24L * 3600_000L)

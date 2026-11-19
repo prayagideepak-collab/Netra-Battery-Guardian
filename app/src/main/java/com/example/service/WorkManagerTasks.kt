@@ -1,5 +1,8 @@
 package com.example.service
 
+import com.example.domain.engine.MeasuredPowerBudget
+import com.example.domain.model.PowerFeature
+
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -44,6 +47,7 @@ class BackgroundDrainCheckWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, params) {
 
   override suspend fun doWork(): Result {
+    if (!MeasuredPowerBudget.permits(PowerFeature.USAGE_ANALYSIS)) return Result.success()
     if (dozeModeMonitor.shouldSkipNonEssentialWork()) return Result.success()
     val prefs = preferencesRepository.preferences.first()
     val telemetry = telemetryCollector.collect(
@@ -103,6 +107,7 @@ class StorageAuditWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, params) {
 
   override suspend fun doWork(): Result {
+    if (!MeasuredPowerBudget.permits(PowerFeature.STORAGE_SCAN)) return Result.success()
     val prefs = preferencesRepository.preferences.first()
     val telemetry = telemetryCollector.collect(
       observedCapacityFallbackMah = prefs.observedCapacityMah,
@@ -195,6 +200,7 @@ class DataRetentionWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, params) {
 
   override suspend fun doWork(): Result {
+    if (!MeasuredPowerBudget.permits(PowerFeature.STORAGE_SCAN)) return Result.success()
     if (dozeModeMonitor.shouldSkipNonEssentialWork()) return Result.success()
     val prefs = preferencesRepository.preferences.first()
     historyRepository.pruneOldData(prefs.dataRetentionDays)
@@ -211,6 +217,7 @@ class GuardianHealthCheckWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, params) {
 
   override suspend fun doWork(): Result {
+    if (!MeasuredPowerBudget.permits(PowerFeature.OPTIONAL_DIAGNOSTIC)) return Result.success()
     if (dozeModeMonitor.shouldSkipNonEssentialWork()) return Result.success()
     selfHealingSupervisor.runNaturalHealthCheck(triggerSource = "workmanager_window")
     return Result.success()
@@ -230,6 +237,7 @@ class DailyBatteryHealthWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, params) {
 
   override suspend fun doWork(): Result {
+    if (!MeasuredPowerBudget.permits(PowerFeature.CYCLE_OBSERVATION)) return Result.success()
     if (dozeModeMonitor.shouldSkipNonEssentialWork()) return Result.success()
     batteryLifecycleEstimator.evaluateAndLogDailyWhileCharging()
     return Result.success()
@@ -249,9 +257,10 @@ class ChargingCsvExportWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, params) {
 
   override suspend fun doWork(): Result {
-    if (dozeModeMonitor.shouldSkipNonEssentialWork()) return Result.retry()
+    if (!MeasuredPowerBudget.permits(PowerFeature.REPORT_EXPORT)) return Result.success()
+    if (dozeModeMonitor.shouldSkipNonEssentialWork()) return Result.success()
     val res = reportExporter.exportBatteryHealthAndTempCsvIfCharging()
-    return if (res.exported) Result.success() else Result.retry()
+    return if (res.exported) Result.success() else Result.failure()
   }
 }
 
@@ -270,6 +279,7 @@ class IdleBatteryPersistenceWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, params) {
 
   override suspend fun doWork(): Result {
+    if (!MeasuredPowerBudget.permits(PowerFeature.ROUTINE_HISTORY)) return Result.success()
     val prefs = preferencesRepository.preferences.first()
     val stickyBatteryIntent = applicationContext.registerReceiver(
       null,

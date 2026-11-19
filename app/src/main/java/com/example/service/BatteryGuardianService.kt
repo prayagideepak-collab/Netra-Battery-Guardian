@@ -1,5 +1,8 @@
 package com.example.service
 
+import com.example.domain.engine.MeasuredPowerBudget
+import com.example.domain.model.PowerFeature
+
 import com.example.domain.model.batteryLevelText
 import com.example.domain.model.telemetryText
 import android.Manifest
@@ -16,7 +19,6 @@ import androidx.core.content.ContextCompat
 import com.example.data.local.prefs.PreferencesRepository
 import com.example.data.local.system.AppPowerInspector
 import com.example.data.local.system.BatteryTelemetryCollector
-import com.example.domain.model.allowsUsageInspection
 import com.example.domain.engine.AutomationRulesEngine
 import com.example.domain.engine.ChargingSpeedClassifier
 import dagger.hilt.android.AndroidEntryPoint
@@ -145,7 +147,7 @@ class BatteryGuardianService : Service() {
       val prefs = preferencesRepository.preferences.first()
       val telemetry = telemetryCollector.collect(intentOverride, prefs.observedCapacityMah)
       val budget = adaptivePowerTierEngine.evaluate(telemetry, 0, 0)
-      val topApps = if (!dozeModeMonitor.shouldSkipNonEssentialWork() && budget.allowsUsageInspection()) appPowerInspector.collectTopApps(limit = 5) else emptyList()
+      val topApps = if (!dozeModeMonitor.shouldSkipNonEssentialWork() && adaptivePowerTierEngine.decision(PowerFeature.USAGE_ANALYSIS, adaptivePowerTierEngine.state.value.sequence, dozeModeMonitor.shouldSkipNonEssentialWork()).allowed) appPowerInspector.collectTopApps(limit = 5) else emptyList()
       val output = rulesEngine.evaluate(telemetry, prefs, topApps, forceSnapshot = forceSnapshot, activeTier = budget.activeTier, dbBatchIntervalSeconds = budget.dbBatchIntervalSeconds)
       val diag = chargingClassifier.diagnose(telemetry)
       com.example.widget.GuardianBatteryWidget.publish(this@BatteryGuardianService, telemetry, diag, prefs.appLanguage)

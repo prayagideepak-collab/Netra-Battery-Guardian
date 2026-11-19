@@ -1,5 +1,7 @@
 package com.example.service
 
+import com.example.domain.engine.MeasuredPowerBudget
+import com.example.domain.model.PowerFeature
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -52,7 +54,7 @@ class BatteryThresholdTtsService : Service() {
     val isCharging = intent.getBooleanExtra(EXTRA_IS_CHARGING, false)
     val screenOn = intent.getBooleanExtra(EXTRA_SCREEN_ON, true)
 
-    if (level !in 0..100 || !isThresholdEligible(level, isCharging)) {
+    if (level !in 0..100 || !isThresholdEligible(level, isCharging) || !runtimeThresholdAllowed(level, isCharging)) {
       stopSelfResult(startId)
       return START_NOT_STICKY
     }
@@ -102,6 +104,9 @@ class BatteryThresholdTtsService : Service() {
       if (isCharging) levelPercent in CHARGE_THRESHOLDS
       else levelPercent in LOW_BATTERY_THRESHOLDS
 
+    private fun runtimeThresholdAllowed(level: Int, charging: Boolean): Boolean =
+      (!charging && level in 1..5) || MeasuredPowerBudget.permits(PowerFeature.ORDINARY_MILESTONE)
+
     fun buildTriggerIntent(
       context: Context,
       levelPercent: Int,
@@ -122,6 +127,7 @@ class BatteryThresholdTtsService : Service() {
       isCharging: Boolean,
       screenOn: Boolean,
     ) {
+      if (!runtimeThresholdAllowed(level, isCharging)) return
       voiceAssistant.observeBatteryDirection(isCharging, isCharging)
       if (isCharging) {
         voiceAssistant.announceChargingMilestone(
@@ -152,7 +158,7 @@ class BatteryThresholdTtsService : Service() {
       screenOn: Boolean,
       allowServiceStart: Boolean,
     ) {
-      if (!isThresholdEligible(levelPercent, isCharging)) return
+      if (!isThresholdEligible(levelPercent, isCharging) || !runtimeThresholdAllowed(levelPercent, isCharging)) return
       if (allowServiceStart) {
         val started = runCatching {
           context.startService(buildTriggerIntent(context, levelPercent, isCharging, screenOn))

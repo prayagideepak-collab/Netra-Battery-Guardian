@@ -143,19 +143,9 @@ class ThermalMonitor @Inject constructor(
       lastAlertZone = null
     }
 
-    val tierAllowsAdvisoryAlerts =
-      powerBudget.activeTier == AdaptivePowerTier.NORMAL ||
-        powerBudget.activeTier == AdaptivePowerTier.SAVER
-
-    // In CRITICAL (<15%) or SURVIVAL (<5%), only Tier-0 safety thresholds (>= VERY_HOT / CRITICAL / EMERGENCY) fire
-    val meetsTierThreshold =
-      when (powerBudget.activeTier) {
-        AdaptivePowerTier.NORMAL, AdaptivePowerTier.SAVER -> zone.ordinal >= TemperatureZone.HOT.ordinal
-        AdaptivePowerTier.CRITICAL -> zone.ordinal >= TemperatureZone.VERY_HOT.ordinal
-        AdaptivePowerTier.SURVIVAL -> zone.ordinal >= TemperatureZone.CRITICAL.ordinal
-      }
-
-    val cooldownMillis = if (tierAllowsAdvisoryAlerts) 10 * 60_000L else 20 * 60_000L
+    // A power restriction must not suppress an OS-reported thermal warning.
+    val meetsTierThreshold = zone.ordinal >= TemperatureZone.HOT.ordinal
+    val cooldownMillis = 10 * 60_000L
     val escalatedZone = lastAlertZone == null || zone.ordinal > lastAlertZone!!.ordinal
     val cooldownElapsed = now - lastAlertTimestampMillis >= cooldownMillis
 
