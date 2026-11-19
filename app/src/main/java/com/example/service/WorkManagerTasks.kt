@@ -396,6 +396,7 @@ object NetraWorkScheduler {
   }
 
   fun schedulePeriodicMaintenance(context: Context) {
+    if (!UnlockedStorageGate.isAvailable(context)) return
     val wm = WorkManager.getInstance(context)
 
     wm.enqueueUniquePeriodicWork(

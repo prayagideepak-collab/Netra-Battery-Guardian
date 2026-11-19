@@ -73,14 +73,14 @@ jobs:
           ACTUAL="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/signature.txt" | tr -d '[:space:]' | tr 'A-F' 'a-f')"
           test "$ACTUAL" = "$EXPECTED_CERT_SHA256"
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" > "$RUNNER_TEMP/badging.txt"
-          grep -F "package: name='com.aistudio.netrabattery.kxmzqr' versionCode='2' versionName='1.0.1'" "$RUNNER_TEMP/badging.txt"
+          grep -F "package: name='com.aistudio.netrabattery.kxmzqr' versionCode='3' versionName='1.0.2'" "$RUNNER_TEMP/badging.txt"
           mkdir -p release-candidate
           cp "$APK" release-candidate/app-release.apk
-          cp "$APK" release-candidate/Guardian-v1.0.1.apk
+          cp "$APK" release-candidate/Guardian-v1.0.2.apk
           cp "$RUNNER_TEMP/signature.txt" release-candidate/signature.txt
           cp "$RUNNER_TEMP/badging.txt" release-candidate/badging.txt
-          printf 'sourceSha: %s\nversionCode: 2\nversionName: 1.0.1\n' "$(git rev-parse HEAD)" > release-candidate/provenance.txt
-          (cd release-candidate && sha256sum app-release.apk Guardian-v1.0.1.apk > SHA256SUMS)
+          printf 'sourceSha: %s\nversionCode: 3\nversionName: 1.0.2\n' "$(git rev-parse HEAD)" > release-candidate/provenance.txt
+          (cd release-candidate && sha256sum app-release.apk Guardian-v1.0.2.apk > SHA256SUMS)
       - name: Preserve signed candidate for independent readback
         uses: actions/upload-artifact@v4
         with:
@@ -95,12 +95,12 @@ jobs:
         run: |
           set -euo pipefail
           test "$(gh api repos/$GITHUB_REPOSITORY/branches/main --jq .commit.sha)" = "$EXPECTED_HEAD"
-          python3 -c 'import json,subprocess; r=json.loads(subprocess.check_output(["gh","api","repos/"+__import__("os").environ["GITHUB_REPOSITORY"]+"/releases"])); assert not any(x["tag_name"]=="v1.0.1" for x in r), "Version already exists"'
+          python3 -c 'import json,subprocess; r=json.loads(subprocess.check_output(["gh","api","repos/"+__import__("os").environ["GITHUB_REPOSITORY"]+"/releases"])); assert not any(x["tag_name"]=="v1.0.2" for x in r), "Version already exists"'
           # Atomically create the immutable tag. Existing tags (even matching ones)
           # fail closed with 422; do not attach assets to an earlier tag or retag it.
-          gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref=refs/tags/v1.0.1 -f sha="$EXPECTED_HEAD" > "$RUNNER_TEMP/release-tag.json"
-          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v1.0.1" --jq .object.sha)" = "$EXPECTED_HEAD"
-          gh release create v1.0.1 release-candidate/app-release.apk release-candidate/Guardian-v1.0.1.apk release-candidate/SHA256SUMS release-candidate/provenance.txt release-candidate/signature.txt --verify-tag --title 'Netra Battery Guardian 1.0.1' --notes-file RELEASE-NOTES.md --draft
+          gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref=refs/tags/v1.0.2 -f sha="$EXPECTED_HEAD" > "$RUNNER_TEMP/release-tag.json"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v1.0.2" --jq .object.sha)" = "$EXPECTED_HEAD"
+          gh release create v1.0.2 release-candidate/app-release.apk release-candidate/Guardian-v1.0.2.apk release-candidate/SHA256SUMS release-candidate/provenance.txt release-candidate/signature.txt --verify-tag --title 'Netra Battery Guardian 1.0.2' --notes-file RELEASE-NOTES.md --draft
       - name: Remove temporary signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/netra-release.jks"
