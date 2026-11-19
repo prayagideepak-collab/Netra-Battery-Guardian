@@ -93,7 +93,7 @@ class ChargingVoiceAssistant @Inject constructor(
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
               synchronized(this@ChargingVoiceAssistant) { inFlight.remove(utteranceId) }?.let {
-                postFallbackNotification(it.urgent, it.fallbackTitle, it.message)
+                if (!isSpeedKey(it.key)) postFallbackNotification(it.urgent, it.fallbackTitle, it.message)
               }
               scheduleIdleShutdown()
             }
@@ -126,7 +126,9 @@ class ChargingVoiceAssistant @Inject constructor(
       initFailed = true
       pendingUtterance?.let { pending ->
         pendingUtterance = null
-        if (pending.urgent) {
+        if (isSpeedKey(pending.key)) {
+          // Optional type speech never becomes a stale notification.
+        } else if (pending.urgent) {
           notificationHelper.postCriticalAlert(NotificationHelper.ID_TTS_FALLBACK, pending.fallbackTitle, pending.message)
         } else {
           notificationHelper.postAdvisory(NotificationHelper.ID_TTS_FALLBACK, pending.fallbackTitle, pending.message)
@@ -164,59 +166,73 @@ class ChargingVoiceAssistant @Inject constructor(
     }
   }
 
+  private var currentSpeedKey: String? = null
+  private var speedObservedAtElapsedMillis: Long? = null
+
+  /** Every observation invalidates stale queued type speech, including budget/toggle OFF. */
+  @Synchronized
+  fun observeChargingSpeed(speedClass: ChargingSpeedClass, prefs: UserPreferences, screenOn: Boolean, observedAtElapsedMillis: Long?) {
+    speedObservedAtElapsedMillis = observedAtElapsedMillis
+    val message = speedPhrase(speedClass, prefs.voiceLanguage)
+    val nextKey = if (prefs.announceChargingSpeed && prefs.voiceEnabled && message != null &&
+      com.example.domain.engine.MeasuredPowerBudget.permits(com.example.domain.model.PowerFeature.ORDINARY_MILESTONE)) {
+      "charging_speed_${speedClass.name}"
+    } else null
+    if (currentSpeedKey != nextKey) {
+      cancelSpeedUtterances()
+      currentSpeedKey = nextKey
+    }
+    if (nextKey == null || message == null) return
+    speak(nextKey, message, prefs, urgent = false, bypassNightSilent = false,
+      bypassScreenOffRule = prefs.announceWhileScreenOff, screenOn = screenOn, fallbackTitle = "Netra Charging")
+  }
+
+  private fun isCurrentSpeed(key: String): Boolean = currentSpeedKey == key &&
+    speedObservedAtElapsedMillis?.let { System.nanoTime() / 1_000_000L - it in 0..10_000L } == true
+
+  private fun isSpeedKey(key: String) = key.startsWith("charging_speed_")
+
+  private fun cancelSpeedUtterances() {
+    if (pendingUtterance?.let { isSpeedKey(it.key) } == true) pendingUtterance = null
+    // Type speech is dispatched only into an empty queue. A later ordinary/urgent
+    // message flushes it first, so this never stops unrelated queued speech.
+    if (inFlight.isNotEmpty() && inFlight.keys.all(::isSpeedKey)) runCatching { tts?.stop() }
+    inFlight.keys.removeAll(::isSpeedKey)
+    lastSpokenByKey.keys.removeAll(::isSpeedKey)
+  }
+
+  internal fun speedPhrase(speed: ChargingSpeedClass, language: AppLanguage): String? {
+    val english = when (speed) {
+      ChargingSpeedClass.SLOW -> "Slow charging"
+      ChargingSpeedClass.STANDARD -> "Normal charging"
+      ChargingSpeedClass.FAST -> "Fast charging"
+      ChargingSpeedClass.ULTRA_FAST -> "Ultra Fast charging"
+      ChargingSpeedClass.HYPER_FAST -> "Hyper Fast charging"
+      ChargingSpeedClass.EXTREME_FAST -> "Extreme Fast charging"
+      else -> return null
+    }
+    if (language != AppLanguage.HINDI) return english
+    return when (speed) {
+      ChargingSpeedClass.SLOW -> "धीमी चार्जिंग"
+      ChargingSpeedClass.STANDARD -> "सामान्य चार्जिंग"
+      ChargingSpeedClass.FAST -> "तेज़ चार्जिंग"
+      ChargingSpeedClass.ULTRA_FAST -> "अल्ट्रा फ़ास्ट चार्जिंग"
+      ChargingSpeedClass.HYPER_FAST -> "हाइपर फ़ास्ट चार्जिंग"
+      ChargingSpeedClass.EXTREME_FAST -> "एक्सट्रीम फ़ास्ट चार्जिंग"
+      else -> null
+    }
+  }
+
   fun announceChargerConnected(
     speedClass: ChargingSpeedClass,
     prefs: UserPreferences,
     screenOn: Boolean,
   ) {
-    val text =
-      when (prefs.voiceLanguage) {
-        AppLanguage.ENGLISH -> {
-          val mode =
-            when (speedClass) {
-              ChargingSpeedClass.UNAVAILABLE -> "Charging speed unavailable."
-              ChargingSpeedClass.SLOW -> "Slow charging started."
-              ChargingSpeedClass.STANDARD -> "Normal charging started."
-              ChargingSpeedClass.FAST -> "Fast charging started."
-              ChargingSpeedClass.SUPER_FAST -> "Super fast charging started."
-              ChargingSpeedClass.ULTRA_FAST -> "Ultra fast charging started."
-              ChargingSpeedClass.EXTREME_FAST -> "Extreme fast charging started."
-              ChargingSpeedClass.DISCHARGING_WHILE_PLUGGED -> "Observed net discharge while plugged in."
-              ChargingSpeedClass.NOT_CHARGING -> "Charging detected."
-            }
-          "Charger connected. $mode"
-        }
-        AppLanguage.HINDI -> {
-          val mode =
-            when (speedClass) {
-              ChargingSpeedClass.UNAVAILABLE -> "Charging speed unavailable."
-              ChargingSpeedClass.SLOW -> "धीमी चार्जिंग शुरू हुई।"
-              ChargingSpeedClass.STANDARD -> "सामान्य चार्जिंग शुरू हुई।"
-              ChargingSpeedClass.FAST -> "तेज़ चार्जिंग शुरू हुई।"
-              ChargingSpeedClass.SUPER_FAST -> "सुपर फ़ास्ट चार्जिंग शुरू हुई।"
-              ChargingSpeedClass.ULTRA_FAST -> "अल्ट्रा फ़ास्ट चार्जिंग शुरू हुई।"
-              ChargingSpeedClass.EXTREME_FAST -> "एक्सट्रीम फ़ास्ट चार्जिंग शुरू हुई।"
-              ChargingSpeedClass.DISCHARGING_WHILE_PLUGGED -> "चार्जर जुड़ा होने पर भी बैटरी घट रही है।"
-              ChargingSpeedClass.NOT_CHARGING -> "चार्जिंग शुरू हुई।"
-            }
-          "चार्जर जुड़ गया है। $mode"
-        }
-        AppLanguage.HINGLISH -> {
-          val mode =
-            when (speedClass) {
-              ChargingSpeedClass.UNAVAILABLE -> "Charging speed unavailable."
-              ChargingSpeedClass.SLOW -> "Slow charging shuru ho gayi hai."
-              ChargingSpeedClass.STANDARD -> "Normal charging shuru ho gayi hai."
-              ChargingSpeedClass.FAST -> "Fast charging shuru ho gayi hai."
-              ChargingSpeedClass.SUPER_FAST -> "Super fast charging shuru ho gayi hai."
-              ChargingSpeedClass.ULTRA_FAST -> "Ultra fast charging shuru ho gayi hai."
-              ChargingSpeedClass.EXTREME_FAST -> "Extreme fast charging shuru ho gayi hai."
-              ChargingSpeedClass.DISCHARGING_WHILE_PLUGGED -> "Charger laga hai, lekin battery ghat rahi hai."
-              ChargingSpeedClass.NOT_CHARGING -> "Charging shuru ho gayi hai."
-            }
-          "Charger connect ho gaya hai. $mode"
-        }
-      }
+    val text = when (prefs.voiceLanguage) {
+      AppLanguage.ENGLISH -> "Charger connected."
+      AppLanguage.HINDI -> "चार्जर जुड़ गया है।"
+      AppLanguage.HINGLISH -> "Charger connect ho gaya hai."
+    }
     speak(
       key = "charger_connected",
       message = text,
@@ -390,6 +406,7 @@ class ChargingVoiceAssistant @Inject constructor(
     fallbackTitle: String,
     milestoneLevel: Int? = null,
   ) {
+    if (isSpeedKey(key) && !isCurrentSpeed(key)) return
     if (!prefs.voiceEnabled) {
       if (urgent) notificationHelper.postCriticalAlert(NotificationHelper.ID_TTS_FALLBACK, fallbackTitle, message)
       return
@@ -401,9 +418,11 @@ class ChargingVoiceAssistant @Inject constructor(
     }
 
     if (skipForPlayback()) return
+    if (isSpeedKey(key) && (pendingUtterance != null || inFlight.isNotEmpty())) return
 
     if (milestoneLevel != null && durableMilestones.getBoolean(key, false)) return
     val now = System.currentTimeMillis()
+    if (isSpeedKey(key) && lastSpokenByKey.containsKey(key)) return
     val last = lastSpokenByKey[key] ?: 0L
     if (now - last < 30_000L) return
     lastSpokenByKey[key] = now
@@ -419,18 +438,18 @@ class ChargingVoiceAssistant @Inject constructor(
     }
 
     if (initFailed) {
-      postFallbackNotification(urgent, fallbackTitle, message)
+      if (!isSpeedKey(key)) postFallbackNotification(urgent, fallbackTitle, message)
       return
     }
 
     if (tts == null || !isReady) {
       val previous = pendingUtterance
-      if (previous != null) postFallbackNotification(previous.urgent, previous.fallbackTitle, previous.message)
+      if (previous != null && !isSpeedKey(previous.key)) postFallbackNotification(previous.urgent, previous.fallbackTitle, previous.message)
       pendingUtterance = PendingUtterance(key, message, prefs, urgent, fallbackTitle)
       ensureInitialized()
       if (initFailed) {
         pendingUtterance = null
-        postFallbackNotification(urgent, fallbackTitle, message)
+        if (!isSpeedKey(key)) postFallbackNotification(urgent, fallbackTitle, message)
       }
       return
     }
@@ -438,6 +457,7 @@ class ChargingVoiceAssistant @Inject constructor(
     dispatchToTtsEngine(key, message, prefs, urgent, fallbackTitle)
   }
 
+  @Synchronized
   private fun dispatchToTtsEngine(
     key: String,
     message: String,
@@ -445,6 +465,11 @@ class ChargingVoiceAssistant @Inject constructor(
     urgent: Boolean,
     fallbackTitle: String,
   ) {
+    if (isSpeedKey(key) && (!isCurrentSpeed(key) || inFlight.isNotEmpty() || isNightSilentActive(prefs))) return
+    if (!isSpeedKey(key) && inFlight.keys.any(::isSpeedKey)) {
+      runCatching { tts?.stop() }
+      inFlight.keys.removeAll(::isSpeedKey)
+    }
     // Recheck after lazy initialization: playback may have started while TTS bound.
     if (skipForPlayback()) {
       scheduleIdleShutdown()
@@ -465,7 +490,7 @@ class ChargingVoiceAssistant @Inject constructor(
     val result = runCatching { engine.speak(message, queueMode, params, key) }.getOrDefault(TextToSpeech.ERROR)
     if (result == TextToSpeech.ERROR) {
       inFlight.remove(key)
-      postFallbackNotification(urgent, fallbackTitle, message)
+      if (!isSpeedKey(key)) postFallbackNotification(urgent, fallbackTitle, message)
     }
     scheduleIdleShutdown()
   }

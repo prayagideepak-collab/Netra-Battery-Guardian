@@ -10,8 +10,20 @@ import kotlin.math.roundToInt
 @Singleton
 class ChargingSpeedClassifier @Inject constructor() {
   private val samples = ArrayDeque<BatteryTelemetry>()
+  private val energyPolicy = EnergyCounterSpeedPolicy()
+  private var energyInput: Triple<Long?, Long?, Boolean>? = null
+  private var energyReading = EnergySpeedReading()
+
+  private fun observeEnergy(t: BatteryTelemetry) {
+    val charging = t.isPlugged && t.isCharging && t.batteryStatus != 5 && t.levelPercent != 100
+    val input = Triple(t.energyCounterNwh, t.collectionStartedElapsedMillis, charging)
+    if (input == energyInput) return
+    energyInput = input
+    energyReading = energyPolicy.observe(charging, t.energyCounterNwh, t.collectionStartedElapsedMillis)
+  }
 
   @Synchronized fun recordSample(telemetry: BatteryTelemetry) {
+    observeEnergy(telemetry)
     val previous = samples.lastOrNull()
     if (previous != null && (previous.isPlugged != telemetry.isPlugged ||
         previous.isCharging != telemetry.isCharging || telemetry.timestampMillis <= previous.timestampMillis ||
@@ -23,47 +35,38 @@ class ChargingSpeedClassifier @Inject constructor() {
     while (samples.isNotEmpty() && telemetry.timestampMillis - samples.first().timestampMillis > 30 * 60_000L) samples.removeFirst()
   }
 
-  @Synchronized fun clearSamples() { samples.clear() }
+  @Synchronized fun clearSamples() { samples.clear(); energyPolicy.reset(); energyInput = null; energyReading = EnergySpeedReading() }
 
   @Synchronized fun diagnose(telemetry: BatteryTelemetry): ChargingDiagnosis {
+    observeEnergy(telemetry)
+    // Independent signed battery-side V x I telemetry is preserved, never a speed input.
     val powerWindow = samples.filter { it.hasPower && telemetry.timestampMillis - it.timestampMillis in 0..60_000L }
       .ifEmpty { if (telemetry.hasPower) listOf(telemetry) else emptyList() }
     val avgCurrent = if (telemetry.hasPower && powerWindow.isNotEmpty()) powerWindow.map { it.currentMa }.average().toFloat() else Float.NaN
     val power = if (telemetry.hasPower && powerWindow.isNotEmpty()) powerWindow.map { it.instantaneousPowerWatts }.average().toFloat() else Float.NaN
     val speed = when {
-      !telemetry.hasLevel -> ChargingSpeedClass.UNAVAILABLE
       !telemetry.isPlugged -> ChargingSpeedClass.NOT_CHARGING
-      !power.isFinite() -> ChargingSpeedClass.UNAVAILABLE
-      power < 0 -> ChargingSpeedClass.DISCHARGING_WHILE_PLUGGED
-      !telemetry.isCharging -> ChargingSpeedClass.UNAVAILABLE
-      power < 5 -> ChargingSpeedClass.SLOW
-      power < 10 -> ChargingSpeedClass.STANDARD
-      power < 18 -> ChargingSpeedClass.FAST
-      power < 30 -> ChargingSpeedClass.SUPER_FAST
-      power < 60 -> ChargingSpeedClass.ULTRA_FAST
-      else -> ChargingSpeedClass.EXTREME_FAST
+      !telemetry.isCharging || telemetry.batteryStatus == 5 || telemetry.levelPercent == 100 -> ChargingSpeedClass.UNAVAILABLE
+      else -> when (energyReading.speed) {
+        EnergySpeed.SLOW -> ChargingSpeedClass.SLOW
+        EnergySpeed.NORMAL -> ChargingSpeedClass.STANDARD
+        EnergySpeed.FAST -> ChargingSpeedClass.FAST
+        EnergySpeed.ULTRA_FAST -> ChargingSpeedClass.ULTRA_FAST
+        EnergySpeed.HYPER_FAST -> ChargingSpeedClass.HYPER_FAST
+        EnergySpeed.EXTREME_FAST -> ChargingSpeedClass.EXTREME_FAST
+        null -> ChargingSpeedClass.UNAVAILABLE
+      }
     }
     val minutes = observedMinutes(telemetry)
-    val explanation = when {
-      !telemetry.hasLevel -> "Unavailable: battery level was not reported."
-      telemetry.isPlugged && !telemetry.isCharging -> "Plugged in, not actively charging. Cause unavailable."
-      !power.isFinite() -> "Power unavailable: current or voltage was not reported."
-      power < 0 && telemetry.isPlugged -> "Observed net battery discharge while plugged in. Cause unavailable."
-      telemetry.isCharging -> "Observed battery-side power. Phone-side taper may change the rate; charger or cable fault is not established."
-      else -> "Running on battery power."
-    }
-    val explanationHi = when {
-      !telemetry.hasLevel -> "Unavailable: बैटरी स्तर उपलब्ध नहीं है।"
-      telemetry.isPlugged && !telemetry.isCharging -> "चार्जर जुड़ा है, लेकिन चार्जिंग सक्रिय नहीं है। कारण उपलब्ध नहीं है।"
-      !power.isFinite() -> "Unavailable: करंट या वोल्टेज उपलब्ध नहीं है।"
-      power < 0 && telemetry.isPlugged -> "चार्जर जुड़ा होने पर भी बैटरी में कमी दर्ज हुई। कारण उपलब्ध नहीं है।"
-      telemetry.isCharging -> "बैटरी की वास्तविक नेट पावर। फ़ोन की चार्जिंग गति बदल सकती है; केबल या चार्जर की खराबी साबित नहीं है।"
-      else -> "फ़ोन अभी बैटरी पावर पर चल रहा है।"
-    }
+    val explanation = if (!telemetry.isPlugged) "Running on battery power." else
+      "Estimated net stored-energy rate from Android ENERGY_COUNTER over observed time, not charger output or directly measured charging-input watts. Unsupported/sparse data stays Unavailable; category needs 10 seconds of observed stability."
+    val explanationHi = if (!telemetry.isPlugged) "फ़ोन बैटरी पर है।" else
+      "Android ऊर्जा काउंटर से दर्ज समय में संचित नेट ऊर्जा की अनुमानित दर। यह चार्जर आउटपुट नहीं है। डेटा या स्थिरता कम होने पर Unavailable।"
     return ChargingDiagnosis(speed, power, avgCurrent, minutes, true, ChargingLimitingFactor.NONE,
       explanation, explanationHi,
       "Approximate time uses this session's observed battery-level change only (at least 2 minutes and 2 percentage points). It changes with use and phone-side taper. Unavailable until enough real observations; no fixed capacity, current floor or taper factor.",
-      "अनुमान इस सत्र में दर्ज बैटरी स्तर के बदलाव से है (कम से कम 2 मिनट और 2 प्रतिशत अंक)। उपयोग और फ़ोन की चार्जिंग गति बदलने पर समय बदलेगा। पर्याप्त वास्तविक डेटा तक Unavailable।")
+      "अनुमान इस सत्र में दर्ज बैटरी स्तर के बदलाव से है (कम से कम 2 मिनट और 2 प्रतिशत अंक)। उपयोग और फ़ोन की चार्जिंग गति बदलने पर समय बदलेगा। पर्याप्त वास्तविक डेटा तक Unavailable।",
+      estimatedStoredEnergyRateWatts = energyReading.watts?.toFloat() ?: Float.NaN)
   }
 
   private fun observedMinutes(t: BatteryTelemetry): Int? {

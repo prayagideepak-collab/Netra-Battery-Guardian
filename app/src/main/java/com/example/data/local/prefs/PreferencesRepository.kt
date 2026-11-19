@@ -56,6 +56,7 @@ data class UserPreferences(
   val cumulativeChargedPercent: Float = 0f,
   val designCapacityBaselineMah: Int = 0,
   val lastChargeLevelForCycles: Int = -1,
+  val announceChargingSpeed: Boolean = true,
 )
 
 @Singleton
@@ -68,6 +69,7 @@ class PreferencesRepository @Inject constructor(
     val THEME_MODE = stringPreferencesKey("theme_mode")
     val VOICE_ENABLED = booleanPreferencesKey("voice_enabled")
     val VOICE_VOLUME = floatPreferencesKey("voice_volume")
+    val ANNOUNCE_CHARGING_SPEED = booleanPreferencesKey("announce_charging_speed")
     val ANNOUNCE_CHARGING = booleanPreferencesKey("announce_charging")
     val ANNOUNCE_DISCHARGING = booleanPreferencesKey("announce_discharging")
     val ANNOUNCE_SCREEN_OFF = booleanPreferencesKey("announce_screen_off")
@@ -109,6 +111,7 @@ class PreferencesRepository @Inject constructor(
           voiceEnabled = p[Keys.VOICE_ENABLED] ?: true,
           voiceVolume = (p[Keys.VOICE_VOLUME] ?: 0.85f).coerceIn(0f, 1f),
           announceCharging = p[Keys.ANNOUNCE_CHARGING] ?: true,
+          announceChargingSpeed = p[Keys.ANNOUNCE_CHARGING_SPEED] ?: true,
           announceDischarging = p[Keys.ANNOUNCE_DISCHARGING] ?: true,
           announceWhileScreenOff = p[Keys.ANNOUNCE_SCREEN_OFF] ?: true,
           announcementStepPercent = (p[Keys.ANNOUNCEMENT_STEP] ?: 5).coerceIn(1, 25),
@@ -156,6 +159,10 @@ class PreferencesRepository @Inject constructor(
 
   suspend fun updateVoiceVolume(volume: Float) {
     context.netraDataStore.edit { it[Keys.VOICE_VOLUME] = volume.coerceIn(0f, 1f) }
+  }
+
+  suspend fun updateAnnounceChargingSpeed(enabled: Boolean) {
+    context.netraDataStore.edit { it[Keys.ANNOUNCE_CHARGING_SPEED] = enabled }
   }
 
   suspend fun updateAnnounceCharging(enabled: Boolean) {

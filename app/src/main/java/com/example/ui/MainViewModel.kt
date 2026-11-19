@@ -528,6 +528,10 @@ class MainViewModel @Inject constructor(
     viewModelScope.launch { preferencesRepository.updateVoiceVolume(volume) }
   }
 
+  fun setAnnounceChargingSpeed(enabled: Boolean) {
+    viewModelScope.launch { preferencesRepository.updateAnnounceChargingSpeed(enabled) }
+  }
+
   fun setAnnounceCharging(enabled: Boolean) {
     viewModelScope.launch { preferencesRepository.updateAnnounceCharging(enabled) }
   }

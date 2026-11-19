@@ -85,6 +85,7 @@ enum class ChargingSpeedClass {
   SUPER_FAST,
   ULTRA_FAST,
   EXTREME_FAST,
+  HYPER_FAST,
 }
 
 enum class TemperatureZone {
@@ -201,6 +202,7 @@ data class BatteryTelemetry(
   val chargeCycleCount: Int? = null,
   // Collection-start provenance, not the original age of a sticky broadcast or sensor value.
   val collectionStartedElapsedMillis: Long? = null,
+  val energyCounterNwh: Long? = null,
 ) {
   val hasLevel: Boolean get() = levelPercent in 0..100
   val hasTemperature: Boolean get() = temperatureCelsius.isFinite()
@@ -231,6 +233,7 @@ data class ChargingDiagnosis(
   val explanationHi: String,
   val whyEn: String,
   val whyHi: String,
+  val estimatedStoredEnergyRateWatts: Float = Float.NaN,
 )
 
 enum class ChargingLimitingFactor {
