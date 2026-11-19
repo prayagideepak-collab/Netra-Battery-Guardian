@@ -162,6 +162,13 @@ fun calculateHardwarePower(
   isCharging: Boolean,
   diagnosis: ChargingDiagnosis?,
 ): ValidatedPowerReading {
+  val speed = diagnosis?.speedClass ?: ChargingSpeedClass.UNAVAILABLE
+  val speedEn = when (speed) {
+    ChargingSpeedClass.UNAVAILABLE -> "Unavailable"
+    ChargingSpeedClass.STANDARD -> "NORMAL"
+    else -> speed.name.replace('_', ' ')
+  }
+  val speedHi = com.example.ui.i18n.AppStrings(com.example.domain.model.AppLanguage.HINDI).speedLabel(speed)
   if (voltageMv <= 0 || !validatedCurrent.isAvailable || !validatedCurrent.magnitudeMa.isFinite()) {
     return ValidatedPowerReading(
       isAvailable = false,
@@ -169,8 +176,8 @@ fun calculateHardwarePower(
       chargingPowerText = "Unavailable",
       dischargingPowerText = "Unavailable",
       formulaBreakdownText = "Voltage × Current: Unavailable",
-      chargingSpeedLabelEn = "Unavailable",
-      chargingSpeedLabelHi = "अनुपलब्ध (Unavailable)",
+      chargingSpeedLabelEn = speedEn,
+      chargingSpeedLabelHi = speedHi,
     )
   }
 
@@ -186,8 +193,6 @@ fun calculateHardwarePower(
     watts,
   )
 
-  val speedEn = diagnosis?.speedClass?.takeIf { it != ChargingSpeedClass.UNAVAILABLE }?.name?.replace('_', ' ') ?: ""
-  val speedHi = speedEn
 
   return if (isCharging) {
     ValidatedPowerReading(
@@ -688,7 +693,7 @@ fun BatteryMonitoringDashboardView(
               fontWeight = FontWeight.SemiBold,
             )
             Text(
-              text = if (isHindi) "वोल्टेज × करंट पर आधारित वास्तविक समय गणना" else "Real-Time Calculation (Voltage × Current)",
+              text = if (isHindi) "सेंसर पावर: V × I। गति: ऊर्जा काउंटर।" else "Sensor power: V × I. Speed: energy counter.",
               style = MaterialTheme.typography.labelSmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -724,6 +729,11 @@ fun BatteryMonitoringDashboardView(
         )
       }
 
+      SentinelSpecRow(
+        label = if (isHindi) "संचित नेट ऊर्जा दर (अनुमान)" else "Net stored-energy rate (estimate)",
+        value = telemetryText(chargingDiagnosis?.estimatedStoredEnergyRateWatts ?: Float.NaN, " W"),
+        valueTag = "sentinel_stored_energy_rate",
+      )
       SentinelSpecRow(
         label = if (isHindi) "चार्जिंग स्पीड वर्ग" else "Charging Speed",
         value = validatedPower.chargingSpeedLabelEn,

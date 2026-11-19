@@ -200,8 +200,8 @@ fun HomeScreen(
             modifier = Modifier.weight(1f),
           )
           TelemetryMiniStat(
-            label = strings.netPower,
-            value = "${telemetryText(diag?.netPowerWatts ?: t.instantaneousPowerWatts, " W")}",
+            label = if (strings.isHindi) "ऊर्जा दर (अनुमान)" else "Stored rate (est.)",
+            value = "${telemetryText(diag?.estimatedStoredEnergyRateWatts ?: Float.NaN, " W")}",
             modifier = Modifier.weight(1f),
           )
         }

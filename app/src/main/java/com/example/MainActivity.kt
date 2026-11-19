@@ -326,6 +326,7 @@ private fun NetraRootScaffold(
               onSetVoiceEnabled = viewModel::setVoiceEnabled,
               onSetVoiceVolume = viewModel::setVoiceVolume,
               onSetAnnounceCharging = viewModel::setAnnounceCharging,
+              onSetAnnounceChargingSpeed = viewModel::setAnnounceChargingSpeed,
               onSetAnnounceDischarging = viewModel::setAnnounceDischarging,
               onSetAnnounceScreenOff = viewModel::setAnnounceScreenOff,
               onSetAnnouncementStep = viewModel::setAnnouncementStep,

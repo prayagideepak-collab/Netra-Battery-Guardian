@@ -139,6 +139,8 @@ class BatteryTelemetryCollector @Inject constructor(
 
     return BatteryTelemetry(
       collectionStartedElapsedMillis = collectionStarted,
+      energyCounterNwh = runCatching { batteryManager?.getLongProperty(BatteryManager.BATTERY_PROPERTY_ENERGY_COUNTER) }
+        .getOrNull()?.takeIf { it > 0L && it != Long.MIN_VALUE },
       timestampMillis = System.currentTimeMillis(),
       batteryStatus = status,
       levelPercent = levelPercent,

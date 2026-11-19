@@ -15,28 +15,18 @@ import org.junit.Test
 class NetraDomainEnginesTest {
 
   @Test
-  fun `charging classifier calculates net battery wattage bands accurately`() {
+  fun `charging speed does not use signed voltage times current`() {
     val classifier = ChargingSpeedClassifier()
-
-    // 4.0 V * 2000 mA / 1000 = 8.0 W -> Standard
-    val std = BatteryTelemetry(levelPercent = 40, isCharging = true, isPlugged = true, voltageMv = 4000, currentMa = 2000f)
-    classifier.recordSample(std)
-    val stdDiag = classifier.diagnose(std)
-    assertEquals(ChargingSpeedClass.STANDARD, stdDiag.speedClass)
-
+    val t = BatteryTelemetry(levelPercent = 40, isCharging = true, isPlugged = true, voltageMv = 4200, currentMa = 5000f)
+    classifier.recordSample(t)
+    val diagnosis = classifier.diagnose(t)
+    assertEquals(ChargingSpeedClass.UNAVAILABLE, diagnosis.speedClass)
+    assertEquals(21f, diagnosis.netPowerWatts, 0.001f)
+    assertEquals(true, diagnosis.estimatedStoredEnergyRateWatts.isNaN())
+    val drain = t.copy(isCharging = false, currentMa = -650f)
     classifier.clearSamples()
-    // 4.2 V * 5000 mA / 1000 = 21.0 W -> Super Fast
-    val superFast = BatteryTelemetry(levelPercent = 30, isCharging = true, isPlugged = true, voltageMv = 4200, currentMa = 5000f)
-    classifier.recordSample(superFast)
-    val sfDiag = classifier.diagnose(superFast)
-    assertEquals(ChargingSpeedClass.SUPER_FAST, sfDiag.speedClass)
-
-    classifier.clearSamples()
-    // Discharging while plugged
-    val drainWhilePlugged = BatteryTelemetry(levelPercent = 50, isCharging = false, isPlugged = true, voltageMv = 3900, currentMa = -650f)
-    classifier.recordSample(drainWhilePlugged)
-    val drainDiag = classifier.diagnose(drainWhilePlugged)
-    assertEquals(ChargingSpeedClass.DISCHARGING_WHILE_PLUGGED, drainDiag.speedClass)
+    assertEquals(ChargingSpeedClass.UNAVAILABLE, classifier.diagnose(drain).speedClass)
+    assertEquals(-2.73f, classifier.diagnose(drain).netPowerWatts, 0.001f)
   }
 
   @Test

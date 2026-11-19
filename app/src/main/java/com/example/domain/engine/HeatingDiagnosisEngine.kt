@@ -52,15 +52,16 @@ class HeatingDiagnosisEngine @Inject constructor(
         ChargingSpeedClass.FAST,
         ChargingSpeedClass.SUPER_FAST,
         ChargingSpeedClass.ULTRA_FAST,
+        ChargingSpeedClass.HYPER_FAST,
         ChargingSpeedClass.EXTREME_FAST,
       )
     ) {
       causes +=
         HeatCauseItem(
-          titleEn = "High-wattage fast charging",
-          titleHi = "तेज़ (हाई-वाट) चार्जिंग",
-          detailEn = "Charging at ${String.format("%.1f", chargingDiagnosis.netPowerWatts)} W naturally raises cell temperature.",
-          detailHi = "${String.format("%.1f", chargingDiagnosis.netPowerWatts)} W की तेज़ चार्जिंग से बैटरी हल्की गर्म होती है।",
+          titleEn = "Fast stored-energy gain observed",
+          titleHi = "संचित ऊर्जा तेज़ बढ़ती दर्ज हुई",
+          detailEn = "Estimated net stored-energy rate: ${String.format("%.1f", chargingDiagnosis.estimatedStoredEnergyRateWatts)} W. Charger input and the cause of heat are not established by this reading.",
+          detailHi = "अनुमानित संचित नेट ऊर्जा दर: ${String.format("%.1f", chargingDiagnosis.estimatedStoredEnergyRateWatts)} W। यह चार्जर इनपुट या गर्मी का कारण साबित नहीं करता।",
         )
     }
 
