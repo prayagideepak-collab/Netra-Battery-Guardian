@@ -22,3 +22,21 @@ widgets, document picker and drain tests are NOT RUN. No zero-impact, measured
 saving, cooling, device-stability or universal background-delivery guarantee.
 See RELEASE-NOTES.md and docs/POWER-V2-* for the scoped automated evidence and
 unfinished work. Keep Play Protect ON.
+
+
+## Guardian 1.0.3 / versionCode 4
+
+Adds approved PR19 charging observations and PR20 health/accessory completeness
+to the prior PR12-18 release. This is not an Android OS security patch. Energy
+counter rate estimates are not charger-output watts; independent electrical
+readings are not a fallback speed classifier. Unknown OS health is unavailable,
+and no health percent is inferred from remaining charge divided by level.
+Optional accessory reads and ordinary charging-type speech remain deferred
+without a measured budget. No new permission, discovery, service, sampler,
+Bluetooth device speech, signing identity, secret or release-guard change.
+
+Exact-head CI, established certificate continuity and independent APK package,
+version and hash readback remain publication gates. Physical counter/accessory
+support, measurement accuracy, install/upgrade/reboot, OEM callbacks, speech
+routing and drain tests are NOT RUN. No device-stability, accuracy, cooling or
+power-saving guarantee. Keep Play Protect ON. Prior1.0.2 section is historical.
