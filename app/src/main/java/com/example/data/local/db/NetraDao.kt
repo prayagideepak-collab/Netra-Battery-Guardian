@@ -5,10 +5,18 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface NetraDao {
+  /** Commit both essential records, or neither if a write fails or the coroutine is cancelled. */
+  @Transaction
+  suspend fun recordCriticalThermalEvent(snapshot: BatterySnapshot, log: ActivityLogEntity) {
+    insertSnapshot(snapshot)
+    insertActivityLog(log)
+  }
+
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun insertSnapshot(snapshot: BatterySnapshot): Long
 

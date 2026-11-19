@@ -108,8 +108,7 @@ class ThermalSafetyMonitorWorker @AssistedInject constructor(
     val voltageVolts = com.example.domain.model.telemetryText(telemetry.voltageVolts, " V", 2)
 
     // Persist snapshot and critical thermal event log atomically to Room
-    appDatabase.batteryDao().insertSnapshot(
-      BatterySnapshot(
+    val criticalSnapshot = BatterySnapshot(
         timestampMillis = nowMillis,
         levelPercent = bmLevel,
         voltageMv = telemetry.voltageMv,
@@ -125,7 +124,6 @@ class ThermalSafetyMonitorWorker @AssistedInject constructor(
         activeProfile = "THERMAL_WORKER",
         isHourlyCheckpoint = false,
       )
-    )
 
     val detailEn = buildString {
       append("$tempStr (${zone.name}) at ${com.example.domain.model.batteryLevelText(bmLevel)}, $voltageVolts")
@@ -136,8 +134,7 @@ class ThermalSafetyMonitorWorker @AssistedInject constructor(
       "$tempStr (${zone.name}) • स्तर: ${com.example.domain.model.batteryLevelText(bmLevel)}, वोल्टेज: $voltageVolts।" +
         if (isChargingNow) " ठंडा करने के लिए चार्जर हटाएँ।" else " भारी उपयोग रोकें।"
 
-    appDatabase.netraDao().insertActivityLog(
-      ActivityLogEntity(
+    val criticalLog = ActivityLogEntity(
         timestampMillis = nowMillis,
         category = LogCategory.HEAT.name,
         severity = LogSeverity.CRITICAL.name,
@@ -148,9 +145,7 @@ class ThermalSafetyMonitorWorker @AssistedInject constructor(
         whyEn = "Background WorkManager thermal guard detected dangerous battery heat via BatteryManager and logged it offline.",
         whyHi = "बैकग्राउंड WorkManager मॉनिटर ने BatteryManager से अत्यधिक गर्मी का पता लगाकर इसे ऑफ़लाइन दर्ज किया।",
       )
-    )
 
-    logWriter.append("THERMAL_WORKER", "CRITICAL thermal event logged: $detailEn")
     notificationHelper.postThermalObservation(
       telemetry = telemetry,
       critical = true,
@@ -162,6 +157,16 @@ class ThermalSafetyMonitorWorker @AssistedInject constructor(
       },
     )
 
+    try {
+      appDatabase.netraDao().recordCriticalThermalEvent(criticalSnapshot, criticalLog)
+    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+      throw cancelled
+    } catch (_: Exception) {
+      // Warning attempt already happened. No partial record or automatic retry storm.
+      runCatching { logWriter.append("THERMAL_WORKER", "Critical thermal persistence failed; warning attempted, no database record committed.") }
+      return Result.failure()
+    }
+    runCatching { logWriter.append("THERMAL_WORKER", "CRITICAL thermal event logged: $detailEn") }
     return Result.success()
   }
 }

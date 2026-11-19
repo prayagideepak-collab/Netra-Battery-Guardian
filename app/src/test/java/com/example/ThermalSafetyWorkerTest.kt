@@ -173,4 +173,23 @@ class ThermalSafetyWorkerTest {
     assertEquals(LogSeverity.CRITICAL.name, logs[0].severity)
     assertTrue(logs[0].detailEn.contains("BATTERY_HEALTH_OVERHEAT"))
   }
+  @Test
+  fun persistenceFailureDoesNotBlockWarningOrCommitHalfAnEvent() = runBlocking {
+    Shadows.shadowOf(context).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+    db.openHelper.writableDatabase.execSQL("CREATE TRIGGER fail_worker_log BEFORE INSERT ON activity_logs BEGIN SELECT RAISE(ABORT, 'injected log failure'); END")
+    val hot = Intent(Intent.ACTION_BATTERY_CHANGED).apply {
+      putExtra(BatteryManager.EXTRA_LEVEL, 50)
+      putExtra(BatteryManager.EXTRA_SCALE, 100)
+      putExtra(BatteryManager.EXTRA_HEALTH, BatteryManager.BATTERY_HEALTH_OVERHEAT)
+      putExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_DISCHARGING)
+    }
+    @Suppress("DEPRECATION")
+    context.sendStickyBroadcast(hot)
+    assertEquals(ListenableWorker.Result.failure(), buildWorker().doWork())
+    assertTrue(db.batteryDao().observeAllSnapshots().first().isEmpty())
+    assertTrue(db.netraDao().getAllLogsForExport().isEmpty())
+    val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+    assertTrue(Shadows.shadowOf(nm).getNotification(NotificationHelper.ID_THERMAL_ALERT) != null)
+  }
+
 }
