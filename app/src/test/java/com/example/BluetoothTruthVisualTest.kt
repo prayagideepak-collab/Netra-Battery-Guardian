@@ -50,6 +50,23 @@ class BluetoothTruthVisualTest {
     rule.onAllNodesWithText("almost disconnect", substring = true).assertCountEquals(0)
     capture("bluetooth-signal-estimates")
   }
+  @Test fun integratedPermissionAndSectionPreview() {
+    org.robolectric.Shadows.shadowOf(rule.activity.application).denyPermissions(android.Manifest.permission.BLUETOOTH_CONNECT)
+    rule.setContent { NetraBatteryTheme { Surface {
+      Column(Modifier.padding(16.dp)) {
+        Text("Bluetooth section | automated preview", style = MaterialTheme.typography.titleLarge)
+        Text("Permission denied fixture. No accessory data.")
+        com.example.ui.components.ConnectedBluetoothCard()
+      }
+    } } }
+    rule.onNodeWithText("Bluetooth devices").assertExists()
+    rule.onNodeWithText("Allow Nearby Devices").assertExists()
+    rule.onNodeWithText("Allow Nearby Devices to view connected accessories. No location access is needed.").assertExists()
+    capture("bluetooth-integrated-permission-section")
+    rule.onNodeWithText("Allow Nearby Devices").performClick()
+    rule.waitForIdle()
+    rule.onAllNodesWithText("Stronger signal", substring = true).assertCountEquals(0)
+  }
   private fun capture(name: String) {
     rule.waitForIdle()
     rule.runOnIdle {
