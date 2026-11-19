@@ -34,7 +34,7 @@ class BluetoothTruthVisualTest {
       Text("No device readings. Not physical-device evidence.")
     } } } }
     rule.onNodeWithText("Signal: Unavailable").assertExists()
-    rule.onNodeWithText("Battery: ").assertExists()
+    rule.onNodeWithText("Battery: Unavailable").assertExists()
     rule.onAllNodesWithText("Stronger signal", substring = true).assertCountEquals(0)
     capture("bluetooth-missing-readings")
   }

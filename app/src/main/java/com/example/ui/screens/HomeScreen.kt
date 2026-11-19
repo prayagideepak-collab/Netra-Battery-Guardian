@@ -412,7 +412,7 @@ fun HomeScreen(
     item {
       com.example.ui.components.ConnectedBluetoothCard(
         isHindi = state.prefs.appLanguage == com.example.domain.model.AppLanguage.HINDI,
-        measurementsAllowed = state.powerBudget.activeTier == AdaptivePowerTier.NORMAL || state.powerBudget.activeTier == AdaptivePowerTier.SAVER,
+        measurementsAllowed = com.example.domain.engine.MeasuredPowerBudget.permits(com.example.domain.model.PowerFeature.CONNECTED_ACCESSORY_READ),
       )
     }
   }

@@ -33,6 +33,7 @@ enum class PowerFeature(val importance: FeatureImportance) {
   CYCLE_OBSERVATION(FeatureImportance.OPTIONAL),
   ANIMATION(FeatureImportance.DECORATIVE),
   OPTIONAL_DIAGNOSTIC(FeatureImportance.DECORATIVE),
+  CONNECTED_ACCESSORY_READ(FeatureImportance.OPTIONAL),
 }
 
 enum class FeatureDisposition { ALLOW, DEFER }
