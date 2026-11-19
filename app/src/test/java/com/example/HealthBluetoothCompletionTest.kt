@@ -44,7 +44,18 @@ class HealthBluetoothCompletionTest {
     rule.onNodeWithTag("battery_screen_list").performScrollToNode(hasTestTag("observed_health_percentage"))
     rule.onNodeWithTag("observed_health_category").assertTextEquals("Android health category: Unavailable")
     rule.onNodeWithTag("observed_health_percentage").assertTextEquals("Battery health %: Unavailable")
+    rule.onNodeWithText("Temperature: Unavailable").assertExists()
+    rule.onNodeWithText("Voltage: Unavailable").assertExists()
     capture("health-observations-unknown")
+  }
+  @Test fun missingTemperatureAndVoltageAreExplicitInHindi() {
+    rule.setContent { NetraBatteryTheme { Surface { Column(Modifier.padding(16.dp)) {
+      Text("स्वचालित स्क्रीन परीक्षण, फ़ोन का माप नहीं")
+      GuardianCard { BatteryHealthObservationContent(BatteryTelemetry(),true) }
+    } } } }
+    rule.onNodeWithText("तापमान: Unavailable").assertExists()
+    rule.onNodeWithText("वोल्टेज: Unavailable").assertExists()
+    capture("health-observations-hindi-unavailable")
   }
   @Test fun hindiHealthKeepsIndependentInputsWithoutInventedBaseline() {
     val t=BatteryTelemetry(levelPercent=50,healthState=BatteryHealthState.GOOD,temperatureCelsius=32.5f,
@@ -55,6 +66,8 @@ class HealthBluetoothCompletionTest {
     } } } }
     rule.onNodeWithTag("observed_health_percentage").assertTextEquals("बैटरी स्वास्थ्य %: Unavailable")
     rule.onNodeWithText("OS चक्र गणना: 112").assertExists()
+    rule.onNodeWithText("तापमान: 32.5 °C").assertExists()
+    rule.onNodeWithText("वोल्टेज: 4.10 V").assertExists()
     rule.onAllNodesWithText("100%",substring=true).assertCountEquals(0)
     capture("health-observations-hindi")
   }

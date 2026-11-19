@@ -21,8 +21,8 @@ fun BatteryHealthObservationContent(t: BatteryTelemetry, isHindi: Boolean = fals
     style = MaterialTheme.typography.titleMedium,
     modifier = Modifier.testTag("observed_health_percentage"),
   )
-  Text("${if (isHindi) "तापमान" else "Temperature"}: ${telemetryText(t.temperatureCelsius, " °C")}")
-  Text("${if (isHindi) "वोल्टेज" else "Voltage"}: ${telemetryText(t.voltageVolts, " V", 2)}")
+  Text("${if (isHindi) "तापमान" else "Temperature"}: ${telemetryText(t.temperatureCelsius, " °C").ifBlank { "Unavailable" }}")
+  Text("${if (isHindi) "वोल्टेज" else "Voltage"}: ${telemetryText(t.voltageVolts, " V", 2).ifBlank { "Unavailable" }}")
   Text("${if (isHindi) "OS चक्र गणना" else "OS cycle count"}: ${t.chargeCycleCount?.takeIf { it >= 0 }?.toString() ?: "Unavailable"}")
   val remaining = t.chargeCounterUah.takeIf { it > 0 }?.let { "$it µAh" } ?: "Unavailable"
   Text("${if (isHindi) "शेष चार्ज काउंटर" else "Remaining-charge counter"}: $remaining")
