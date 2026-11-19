@@ -124,7 +124,7 @@ fun BatteryScreen(
         }
         if (diag != null) {
           StatusPill(
-            text = "${strings.speedLabel(diag.speedClass)} • ${telemetryText(diag.estimatedStoredEnergyRateWatts, " W")}\nNet stored-energy rate (estimate)",
+            text = "${strings.speedLabel(diag.speedClass)} • ${telemetryText(diag.estimatedStoredEnergyRateWatts, " W").ifBlank { "Unavailable" }}\nNet stored-energy rate (estimate)",
             color = SemanticCoolMint,
           )
           Text(

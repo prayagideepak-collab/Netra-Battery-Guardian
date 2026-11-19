@@ -201,7 +201,7 @@ fun HomeScreen(
           )
           TelemetryMiniStat(
             label = if (strings.isHindi) "ऊर्जा दर (अनुमान)" else "Stored rate (est.)",
-            value = "${telemetryText(diag?.estimatedStoredEnergyRateWatts ?: Float.NaN, " W")}",
+            value = "${telemetryText(diag?.estimatedStoredEnergyRateWatts ?: Float.NaN, " W").ifBlank { "Unavailable" }}",
             modifier = Modifier.weight(1f),
           )
         }

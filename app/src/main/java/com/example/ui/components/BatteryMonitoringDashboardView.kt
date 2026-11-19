@@ -731,7 +731,7 @@ fun BatteryMonitoringDashboardView(
 
       SentinelSpecRow(
         label = if (isHindi) "संचित नेट ऊर्जा दर (अनुमान)" else "Net stored-energy rate (estimate)",
-        value = telemetryText(chargingDiagnosis?.estimatedStoredEnergyRateWatts ?: Float.NaN, " W"),
+        value = telemetryText(chargingDiagnosis?.estimatedStoredEnergyRateWatts ?: Float.NaN, " W").ifBlank { "Unavailable" },
         valueTag = "sentinel_stored_energy_rate",
       )
       SentinelSpecRow(
