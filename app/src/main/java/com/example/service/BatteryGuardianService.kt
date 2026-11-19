@@ -43,6 +43,7 @@ class BatteryGuardianService : Service() {
   @Inject lateinit var chargingClassifier: ChargingSpeedClassifier
   @Inject lateinit var adaptivePowerTierEngine: com.example.domain.engine.AdaptivePowerTierEngine
   @Inject lateinit var dozeModeMonitor: DozeModeMonitor
+  @Inject lateinit var thermalMonitor: ThermalMonitor
   @Inject lateinit var preferencesRepository: PreferencesRepository
 
   private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -81,6 +82,7 @@ class BatteryGuardianService : Service() {
     super.onCreate()
     notificationHelper.createChannels()
     startInForegroundCompat("Netra Guardian Active", "Monitoring battery, charging & thermal safety locally.")
+    thermalMonitor.register(ThermalMonitor.OWNER_GUARDIAN_SERVICE)
     registerSystemReceiver()
     evaluateNow(intentOverride = null, forceSnapshot = true)
   }
@@ -163,6 +165,7 @@ class BatteryGuardianService : Service() {
   }
 
   override fun onDestroy() {
+    thermalMonitor.unregister(ThermalMonitor.OWNER_GUARDIAN_SERVICE)
     telemetryCollector.stopCoolingBrightness()
     if (receiverRegistered) {
       runCatching { unregisterReceiver(systemEventsReceiver) }

@@ -213,6 +213,7 @@ class ThermalMonitor @Inject constructor(
   companion object {
     const val DEFAULT_OWNER = "default"
     const val OWNER_FOREGROUND_UI = "foreground_ui"
+    const val OWNER_GUARDIAN_SERVICE = "guardian_service"
     const val OWNER_MONITORING_SERVICE = "monitoring_service"
   }
 }

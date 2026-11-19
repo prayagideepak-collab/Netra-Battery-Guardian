@@ -34,6 +34,15 @@ class StabilityCorrectionTest {
   private fun assistant() = ChargingVoiceAssistant(app, NotificationHelper(app))
   private val prefs = UserPreferences(voiceEnabled = true, announceCharging = true, announceDischarging = true, nightSilentEnabled = false)
 
+  @Test @Config(sdk = [28]) fun preAndroidTenHasNoOsThermalStatus() {
+    assertFalse(BatteryTelemetryCollector(app).collect().thermalStatusAvailable)
+  }
+  @Test fun bluetoothAddsNoDiscoveryPermissionAndIsOptional() {
+    @Suppress("DEPRECATION")
+    val requested = app.packageManager.getPackageInfo(app.packageName, android.content.pm.PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty()
+    assertFalse(requested.contains("android.permission.BLUETOOTH_SCAN"))
+    assertFalse(requested.contains("android.permission.INTERNET"))
+  }
   @Test fun allFivePercentThresholdsAndOnePercentAreEligible() {
     for (level in 5..100 step 5) {
       assertTrue(BatteryThresholdTtsService.isThresholdEligible(level, true))
@@ -209,6 +218,16 @@ class StabilityCorrectionTest {
     assertEquals(logCount, db.netraDao().getAllLogsForExport().size)
     assertEquals(1, db.netraDao().getSnapshotsSince(0).size)
     assertEquals("keep", cached.readText())
+    val hot = t.copy(timestampMillis = t.timestampMillis + 2_000, healthState = BatteryHealthState.GOOD, thermalLevel = ThermalLevel.MODERATE, thermalStatusAvailable = true)
+    engine.evaluate(hot, prefs, emptyList())
+    val cleared = hot.copy(timestampMillis = hot.timestampMillis + 1_000, thermalLevel = ThermalLevel.NONE)
+    engine.evaluate(cleared, prefs, emptyList())
+    val confirmed = cleared.copy(timestampMillis = cleared.timestampMillis + 301_000)
+    val recoveryPrefs = prefs.copy(below35SinceMillis = cleared.timestampMillis)
+    engine.evaluate(confirmed, recoveryPrefs, emptyList())
+    assertEquals(1, db.netraDao().getAllLogsForExport().count { it.titleEn == "OS Thermal Warning Cleared" })
+    engine.evaluate(confirmed.copy(timestampMillis = confirmed.timestampMillis + 2_000), recoveryPrefs, emptyList())
+    assertEquals(1, db.netraDao().getAllLogsForExport().count { it.titleEn == "OS Thermal Warning Cleared" })
     voice.shutdown(); db.close()
   }
   @Test fun bluetoothNeverTurnsMissingSignalGreenAndDenialIsSafe() {

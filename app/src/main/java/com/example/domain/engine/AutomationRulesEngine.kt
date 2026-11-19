@@ -49,6 +49,7 @@ class AutomationRulesEngine @Inject constructor(
   private var lastScreenOnState: Boolean? = null
   private var lastProfile: GuardianProfile? = null
   private var lastZone: TemperatureZone? = null
+  private var awaitingThermalRecovery = false
   private var lastLowBatteryAlertLevel: Int = -1
   private var lastSnapshotSavedMillis: Long = 0L
   private val evalMutex = Mutex()
@@ -185,10 +186,12 @@ class AutomationRulesEngine @Inject constructor(
 
     // 4. Recovery requires an OS health-clear signal, not an invented Celsius limit.
     val now = telemetry.timestampMillis
+    if (zone.ordinal >= TemperatureZone.WARM.ordinal) awaitingThermalRecovery = true
     if (telemetry.thermalStatusAvailable && telemetry.healthState == com.example.domain.model.BatteryHealthState.GOOD && telemetry.thermalLevel == com.example.domain.model.ThermalLevel.NONE) {
       if (prefs.below35SinceMillis == 0L) {
         preferencesRepository.setBelow35Since(now)
-      } else if (now - prefs.below35SinceMillis >= 5 * 60_000L && lastZone != null && lastZone!!.ordinal >= TemperatureZone.WARM.ordinal) {
+      } else if (now - prefs.below35SinceMillis >= 5 * 60_000L && awaitingThermalRecovery) {
+        awaitingThermalRecovery = false
         voiceAssistant.announceThermalSafety(
           key = "normal_temp_restored",
           messageEn = "Android thermal warning cleared.",
@@ -237,8 +240,8 @@ class AutomationRulesEngine @Inject constructor(
       }
 
       if (prefs.locationSaverMode != LocationSaverMode.NORMAL && !prefs.emergencyLocationException) {
-        coolingStepsEn += "Location sampling paused under Location Saver."
-        coolingStepsHi += "लोकेशन सेवर के अंतर्गत लोकेशन सैंपलिंग रोकी गई।"
+        coolingStepsEn += "Location Saver is selected. Android settings control other apps' location access."
+        coolingStepsHi += "लोकेशन सेवर चुना गया है। दूसरे ऐप्स की लोकेशन Android सेटिंग से नियंत्रित करें।"
       }
 
       coolingStepsEn += "Thermal monitoring heightened; advised pausing background sync & heavy apps."
