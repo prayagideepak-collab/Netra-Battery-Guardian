@@ -273,6 +273,7 @@ private fun NetraRootScaffold(
           composable<LiveMonitorRoute> {
             LiveMonitorScreen(
               latestHourlySnapshot = state.hourlySnapshots.firstOrNull(),
+              animationsAllowed = state.powerBudget.activeTier != com.example.domain.model.AdaptivePowerTier.SURVIVAL,
               strings = strings,
               onNavigateBack = { navController.navigateUp() },
               onOpenBatteryHistory = { navigateTo(BatteryRoute) },

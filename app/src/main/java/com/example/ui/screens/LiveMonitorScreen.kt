@@ -91,6 +91,7 @@ fun LiveMonitorScreen(
   telemetry: BatteryTelemetry? = null,
   chargingDiagnosis: ChargingDiagnosis? = null,
   historySnapshots: List<BatterySnapshot> = emptyList(),
+  animationsAllowed: Boolean = true,
 ) {
   val context = LocalContext.current
   val serviceState by BatteryMonitoringService.serviceState.collectAsStateWithLifecycle()
@@ -119,6 +120,7 @@ fun LiveMonitorScreen(
     telemetry = resolvedTelemetry,
     chargingDiagnosis = chargingDiagnosis,
     historySnapshots = historySnapshots,
+    animationsAllowed = animationsAllowed,
   )
 }
 
@@ -135,6 +137,7 @@ fun LiveMonitorContent(
   telemetry: BatteryTelemetry? = null,
   chargingDiagnosis: ChargingDiagnosis? = null,
   historySnapshots: List<BatterySnapshot> = emptyList(),
+  animationsAllowed: Boolean = true,
 ) {
   val timeFormat = remember { SimpleDateFormat("dd MMM HH:mm:ss", Locale.getDefault()) }
   val tempColor = SemanticCoolMint
@@ -358,7 +361,7 @@ fun LiveMonitorContent(
               levelPercent = serviceState.levelPercent,
               isCharging = serviceState.isCharging,
               temperatureCelsius = serviceState.temperatureCelsius,
-              animateRing = serviceState.levelPercent !in 0..4,
+              animateRing = animationsAllowed && serviceState.levelPercent !in 0..4,
               statusLabel = serviceState.chargingStatus,
               modifier = Modifier
                 .size(164.dp)
@@ -519,6 +522,7 @@ fun LiveMonitorContent(
           chargingDiagnosis = chargingDiagnosis,
           historySnapshots = effectiveHistory,
           isHindi = strings.isHindi,
+          animationsAllowed = animationsAllowed,
         )
       }
     }

@@ -171,7 +171,7 @@ class StorageInspector @Inject constructor(
       if (!shouldContinue()) break
       if (runCatching { File(root.parentFile.canonicalFile, root.name) != root.canonicalFile }.getOrDefault(true)) continue
       val before = runCatching { directorySize(root, shouldContinue) }.getOrNull() ?: continue
-      runCatching { deleteChildren(root, root.canonicalFile, shouldContinue) }
+      runCatching { deleteChildren(root.canonicalFile, root.canonicalFile, shouldContinue) }
       val after = runCatching { directorySize(root, shouldContinue) }.getOrNull() ?: continue
       freed += (before - after).coerceAtLeast(0L)
     }

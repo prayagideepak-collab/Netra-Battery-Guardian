@@ -237,6 +237,7 @@ fun BatteryMonitoringDashboardView(
   historySnapshots: List<BatterySnapshot>,
   isHindi: Boolean,
   modifier: Modifier = Modifier,
+  animationsAllowed: Boolean = true,
 ) {
   val tempStatus = remember(telemetry.temperatureCelsius) {
     classifySentinelTemperature(telemetry.temperatureCelsius)
@@ -366,7 +367,7 @@ fun BatteryMonitoringDashboardView(
           levelPercent = telemetry.levelPercent,
           isCharging = telemetry.isCharging,
           temperatureCelsius = telemetry.temperatureCelsius,
-          animateRing = telemetry.levelPercent !in 0..4,
+          animateRing = animationsAllowed && telemetry.levelPercent !in 0..4,
           statusLabel = if (!telemetry.hasLevel) "" else if (telemetry.isCharging) "CHARGING" else "DISCHARGING",
           modifier = Modifier
             .size(152.dp)
