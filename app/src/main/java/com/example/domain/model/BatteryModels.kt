@@ -199,6 +199,8 @@ data class BatteryTelemetry(
   val standbyBucket: AppStandbyBucket = AppStandbyBucket.ACTIVE,
   val isAppInForeground: Boolean = true,
   val chargeCycleCount: Int? = null,
+  // Collection-start provenance, not the original age of a sticky broadcast or sensor value.
+  val collectionStartedElapsedMillis: Long? = null,
 ) {
   val hasLevel: Boolean get() = levelPercent in 0..100
   val hasTemperature: Boolean get() = temperatureCelsius.isFinite()

@@ -38,6 +38,7 @@ class BatteryTelemetryCollector @Inject constructor(
     observedCapacityFallbackMah: Int = -1,
     isAppInForeground: Boolean = true,
   ): BatteryTelemetry {
+    val collectionStarted = System.nanoTime() / 1_000_000L
     val intent =
       intentOverride
         ?: context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
@@ -137,6 +138,7 @@ class BatteryTelemetryCollector @Inject constructor(
     val standbyBucket = detectStandbyBucket()
 
     return BatteryTelemetry(
+      collectionStartedElapsedMillis = collectionStarted,
       timestampMillis = System.currentTimeMillis(),
       batteryStatus = status,
       levelPercent = levelPercent,

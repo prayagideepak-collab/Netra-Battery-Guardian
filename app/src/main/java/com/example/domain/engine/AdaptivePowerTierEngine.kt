@@ -38,7 +38,7 @@ class AdaptivePowerTierEngine @Inject constructor() {
     telemetry: BatteryTelemetry,
     wakeupsThisHour: Int,
     snapshotsToday: Int,
-    elapsedRealtimeMillis: Long = System.nanoTime() / 1_000_000L,
+    elapsedRealtimeMillis: Long = telemetry.collectionStartedElapsedMillis ?: (System.nanoTime() / 1_000_000L),
   ): PowerBudgetMetrics {
     val previous = _state.value
     if (previous.observedAtElapsedMillis != null && elapsedRealtimeMillis < previous.observedAtElapsedMillis) {
@@ -123,6 +123,7 @@ class AdaptivePowerTierEngine @Inject constructor() {
       thermalStatusAvailable = telemetry.thermalStatusAvailable,
       isAppInForeground = telemetry.isAppInForeground,
       screenOn = telemetry.screenOn,
+      hasCollectionProvenance = telemetry.collectionStartedElapsedMillis != null,
       restrictions = restrictions,
       metrics = metrics,
     )
