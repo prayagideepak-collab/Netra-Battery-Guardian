@@ -24,8 +24,10 @@ and health/Bluetooth #20 are NOT included. Package
   transaction. Warning attempts precede persistence; storage failures are not
   reported as successful saves. Background scheduling requires unlocked storage;
   pre-unlock Direct Boot startup is removed.
-- Targeted stability corrections include nullable settings selections, timestamp
-  parsing, bounded cache cleanup, chart edge cases and report/reset consistency.
+- Targeted stability corrections serialize/coalesce battery-event work, cache
+  usage-stat reads, bound cache traversal, preserve urgent/milestone paths and
+  distinguish unavailable OS thermal observations. Connected Bluetooth remains
+  readings-only using public APIs, with no device announcements or scanning.
 
 ## Verification and limits
 
