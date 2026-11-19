@@ -109,6 +109,7 @@ class TempTrendChartAndThresholdTtsServiceTest {
     val prefs = UserPreferences(
       voiceEnabled = true,
       announceCharging = true,
+      announceWhileScreenOff = false,
       announceDischarging = true,
       nightSilentEnabled = false,
     )

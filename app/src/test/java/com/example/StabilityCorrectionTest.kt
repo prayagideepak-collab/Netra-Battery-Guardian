@@ -28,6 +28,7 @@ class StabilityCorrectionTest {
   private lateinit var app: Application
   @Before fun setup() {
     app = ApplicationProvider.getApplicationContext()
+    org.robolectric.shadows.ShadowStatFs.registerStats(android.os.Environment.getDataDirectory().path, 1_000_000, 500_000, 500_000)
     app.getSharedPreferences("guardian_voice_milestones_v1", Context.MODE_PRIVATE).edit().clear().commit()
     app.cacheDir.listFiles()?.forEach { it.deleteRecursively() }
   }

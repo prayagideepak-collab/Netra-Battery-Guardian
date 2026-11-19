@@ -92,6 +92,7 @@ class DiskUsageAndTtsAssistantTest {
     val prefs = UserPreferences(
       voiceEnabled = true,
       announceCharging = true,
+      announceWhileScreenOff = false,
       nightSilentEnabled = false,
     )
 
