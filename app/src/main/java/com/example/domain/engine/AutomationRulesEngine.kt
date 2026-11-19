@@ -52,6 +52,9 @@ class AutomationRulesEngine @Inject constructor(
   private var lastLowBatteryAlertLevel: Int = -1
   private var lastSnapshotSavedMillis: Long = 0L
   private val evalMutex = Mutex()
+  private var previousEvent: BatteryTelemetry? = null
+  private var previousPrefs: UserPreferences? = null
+  private var previousOutput: RuleEvaluationOutput? = null
 
   suspend fun evaluate(
     telemetry: BatteryTelemetry,
@@ -59,12 +62,23 @@ class AutomationRulesEngine @Inject constructor(
     topApps: List<AppPowerInsight>,
     forceSnapshot: Boolean = false,
     dbBatchIntervalSeconds: Int = 60,
+    activeTier: com.example.domain.model.AdaptivePowerTier = com.example.domain.model.AdaptivePowerTier.NORMAL,
   ): RuleEvaluationOutput = evalMutex.withLock {
+    val normalized = telemetry.copy(timestampMillis = 0L, isAppInForeground = false)
+    val previous = previousEvent
+    if (!forceSnapshot && previous != null && previousPrefs == prefs &&
+      telemetry.timestampMillis - previous.timestampMillis in 0..1_000L &&
+      previous.copy(timestampMillis = 0L, isAppInForeground = false) == normalized) {
+      previousOutput?.let { return@withLock it }
+    }
+    val routineAllowed = activeTier == com.example.domain.model.AdaptivePowerTier.NORMAL || activeTier == com.example.domain.model.AdaptivePowerTier.SAVER
     chargingClassifier.recordSample(telemetry)
     temperatureEngine.recordTemperature(telemetry.timestampMillis, telemetry.temperatureCelsius)
 
     val chargingDiagnosis: ChargingDiagnosis = chargingClassifier.diagnose(telemetry)
     val zone = temperatureEngine.classifyObserved(telemetry)
+
+    voiceAssistant.observeBatteryDirection(telemetry.isCharging, telemetry.isPlugged)
 
     // 1. Charger connect / disconnect rules
     val prevPlugged = lastPluggedState
@@ -124,7 +138,7 @@ class AutomationRulesEngine @Inject constructor(
     val step = prefs.announcementStepPercent.coerceIn(1, 25)
     if (telemetry.hasLevel && telemetry.isCharging && telemetry.isPlugged) {
       val hitBoundary = telemetry.levelPercent == 100 || (telemetry.levelPercent > 0 && telemetry.levelPercent % step == 0)
-      if (hitBoundary && telemetry.levelPercent != lastAnnouncedChargeLevel && telemetry.screenOn) {
+      if (hitBoundary && routineAllowed) {
         lastAnnouncedChargeLevel = telemetry.levelPercent
         voiceAssistant.announceChargingMilestone(
           level = telemetry.levelPercent,
@@ -138,7 +152,7 @@ class AutomationRulesEngine @Inject constructor(
         telemetry.levelPercent == 1 ||
           telemetry.levelPercent == 100 ||
           (telemetry.levelPercent > 0 && telemetry.levelPercent % step == 0)
-      if (hitBoundary && telemetry.levelPercent != lastAnnouncedDischargeLevel) {
+      if (hitBoundary && (routineAllowed || telemetry.levelPercent <= 5)) {
         lastAnnouncedDischargeLevel = telemetry.levelPercent
         voiceAssistant.announceDischargingMilestone(telemetry.levelPercent, prefs, telemetry.screenOn)
       }
@@ -171,7 +185,7 @@ class AutomationRulesEngine @Inject constructor(
 
     // 4. Recovery requires an OS health-clear signal, not an invented Celsius limit.
     val now = telemetry.timestampMillis
-    if (telemetry.healthState == com.example.domain.model.BatteryHealthState.GOOD && telemetry.thermalLevel == com.example.domain.model.ThermalLevel.NONE) {
+    if (telemetry.thermalStatusAvailable && telemetry.healthState == com.example.domain.model.BatteryHealthState.GOOD && telemetry.thermalLevel == com.example.domain.model.ThermalLevel.NONE) {
       if (prefs.below35SinceMillis == 0L) {
         preferencesRepository.setBelow35Since(now)
       } else if (now - prefs.below35SinceMillis >= 5 * 60_000L && lastZone != null && lastZone!!.ordinal >= TemperatureZone.WARM.ordinal) {
@@ -204,7 +218,7 @@ class AutomationRulesEngine @Inject constructor(
     val coolingActive = thermalCooling || manualCooling
     val knownCoolingState: Boolean? = when {
       coolingActive -> true
-      telemetry.healthState == com.example.domain.model.BatteryHealthState.GOOD && telemetry.thermalLevel == com.example.domain.model.ThermalLevel.NONE -> false
+      telemetry.thermalStatusAvailable && telemetry.healthState == com.example.domain.model.BatteryHealthState.GOOD && telemetry.thermalLevel == com.example.domain.model.ThermalLevel.NONE -> false
       zone == TemperatureZone.UNAVAILABLE -> null
       else -> false
     }
@@ -309,25 +323,8 @@ class AutomationRulesEngine @Inject constructor(
     }
     lastScreenOnState = telemetry.screenOn
 
-    // 7. Auto-clean Netra's own cache if > 100 MB (skip during Doze mode)
-    if (!dozeModeMonitor.shouldSkipNonEssentialWork()) {
-      val ownCacheMb = storageInspector.inspect(telemetry.temperatureCelsius, telemetry.levelPercent).appOwnCacheBytes / (1024 * 1024)
-      if (ownCacheMb > 100L) {
-        val freed = storageInspector.cleanOwnCache()
-        if (freed > 0L) {
-          historyRepository.logActivity(
-            category = LogCategory.STORAGE,
-            severity = LogSeverity.INFO,
-            titleEn = "Auto-Cleaned Netra Cache",
-            titleHi = "नेत्रा ऐप कैश स्वतः साफ़ हुआ",
-            detailEn = "Freed ${StorageInspector.formatBytes(freed)} from Netra's own cache (>100 MB threshold).",
-            detailHi = "नेत्रा के अपने कैश से ${StorageInspector.formatBytes(freed)} खाली किया गया।",
-            whyEn = "Netra only cleans its own temporary cache when it exceeds 100 MB; user files are untouched.",
-            whyHi = "100 MB से अधिक होने पर केवल ऐप का अपना अस्थायी कैश हटाया जाता है।",
-          )
-        }
-      }
-    }
+    // Cache inspection/cleanup belongs to the existing idle StorageAuditWorker.
+    // Battery broadcasts must never traverse cache directories.
 
     // 8. Persist snapshot batched according to Adaptive Power Tier interval
     val minIntervalMillis = dbBatchIntervalSeconds.coerceAtLeast(60) * 1000L
@@ -336,13 +333,17 @@ class AutomationRulesEngine @Inject constructor(
       historyRepository.recordSnapshot(telemetry, activeProfile)
     }
 
-    RuleEvaluationOutput(
+    val output = RuleEvaluationOutput(
       activeProfile = activeProfile,
       coolingWorkflowActive = coolingActive,
       coolingStepsAppliedEn = coolingStepsEn,
       coolingStepsAppliedHi = coolingStepsHi,
       temperatureZone = zone,
     )
+    previousEvent = telemetry
+    previousPrefs = prefs
+    previousOutput = output
+    output
   }
 }
 

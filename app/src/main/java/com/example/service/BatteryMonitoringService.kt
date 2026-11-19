@@ -17,6 +17,7 @@ import com.example.data.local.db.BatterySnapshot
 import com.example.data.local.prefs.PreferencesRepository
 import com.example.data.local.system.AppPowerInspector
 import com.example.data.local.system.BatteryTelemetryCollector
+import com.example.domain.model.allowsUsageInspection
 import com.example.domain.engine.AdaptivePowerTierEngine
 import com.example.domain.engine.AutomationRulesEngine
 import com.example.domain.engine.BatteryLifecycleEstimator
@@ -73,6 +74,7 @@ class BatteryMonitoringService : Service() {
   @Inject lateinit var batteryLifecycleEstimator: BatteryLifecycleEstimator
 
   private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+  private val events = BatteryEventQueue<Intent?>(serviceScope, ::batteryEventKey) { intent, _ -> processBatteryChanged(intent) }
   private var receiverRegistered = false
   private var batteryManager: BatteryManager? = null
 
@@ -159,7 +161,10 @@ class BatteryMonitoringService : Service() {
       }
     }
 
-    serviceScope.launch {
+    events.submit(intent?.let { Intent(it) })
+  }
+
+  private suspend fun processBatteryChanged(intent: Intent?) {
       val prefs = preferencesRepository.preferences.first()
       val telemetry = telemetryCollector.collect(
         intentOverride = intent,
@@ -169,7 +174,7 @@ class BatteryMonitoringService : Service() {
       val tierMetrics = adaptivePowerTierEngine.evaluate(telemetry, wakeupsThisHour = 0, snapshotsToday = 0)
       val inDoze = dozeModeMonitor.shouldSkipNonEssentialWork()
       val topApps =
-        if (!inDoze && appPowerInspector.hasUsageStatsPermission()) {
+        if (!inDoze && tierMetrics.allowsUsageInspection() && appPowerInspector.hasUsageStatsPermission()) {
           appPowerInspector.collectTopApps(5)
         } else {
           emptyList()
@@ -179,9 +184,9 @@ class BatteryMonitoringService : Service() {
         prefs = prefs,
         topApps = topApps,
         forceSnapshot = false,
-        dbBatchIntervalSeconds = tierMetrics.dbBatchIntervalSeconds,
+        activeTier = tierMetrics.activeTier, dbBatchIntervalSeconds = tierMetrics.dbBatchIntervalSeconds,
       )
-      if (!inDoze && telemetry.isCharging) {
+      if (!inDoze && tierMetrics.allowsUsageInspection() && telemetry.isCharging) {
         batteryLifecycleEstimator.evaluateAndLogDailyWhileCharging(
           intentOverride = intent,
           nowMillis = telemetry.timestampMillis,
@@ -253,11 +258,10 @@ class BatteryMonitoringService : Service() {
       val notification = notificationHelper.buildGuardianForegroundNotification("Netra Battery Monitor", statusSummary)
       val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
       try {
-        nm?.notify(NotificationHelper.ID_GUARDIAN_SERVICE, notification)
+        nm?.notify(NotificationHelper.ID_MONITORING_SERVICE, notification)
       } catch (_: SecurityException) {
         // Notifications may be denied/revoked; keep monitoring state local.
       }
-    }
   }
 
   private fun mapStatusCode(statusCode: Int): String =
@@ -281,12 +285,12 @@ class BatteryMonitoringService : Service() {
     val notification = notificationHelper.buildGuardianForegroundNotification(title, body)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
       startForeground(
-        NotificationHelper.ID_GUARDIAN_SERVICE,
+        NotificationHelper.ID_MONITORING_SERVICE,
         notification,
         ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
       )
     } else {
-      startForeground(NotificationHelper.ID_GUARDIAN_SERVICE, notification)
+      startForeground(NotificationHelper.ID_MONITORING_SERVICE, notification)
     }
   }
 

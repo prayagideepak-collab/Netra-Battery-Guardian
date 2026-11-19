@@ -104,7 +104,7 @@ class TempTrendChartAndThresholdTtsServiceTest {
     assertFalse(BatteryThresholdTtsService.isThresholdEligible(53, isCharging = true))
     assertTrue(BatteryThresholdTtsService.isThresholdEligible(20, isCharging = false))
     assertTrue(BatteryThresholdTtsService.isThresholdEligible(5, isCharging = false))
-    assertFalse(BatteryThresholdTtsService.isThresholdEligible(45, isCharging = false))
+    assertTrue(BatteryThresholdTtsService.isThresholdEligible(45, isCharging = false))
 
     val prefs = UserPreferences(
       voiceEnabled = true,

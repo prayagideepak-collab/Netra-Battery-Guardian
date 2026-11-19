@@ -40,7 +40,7 @@ class BatteryThresholdTtsService : Service() {
   @Inject lateinit var voiceAssistant: ChargingVoiceAssistant
   @Inject lateinit var preferencesRepository: PreferencesRepository
 
-  private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+  private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     if (intent?.action != ACTION_TRIGGER_THRESHOLD) {
@@ -92,8 +92,8 @@ class BatteryThresholdTtsService : Service() {
     const val EXTRA_IS_CHARGING = "extra_is_charging"
     const val EXTRA_SCREEN_ON = "extra_screen_on"
 
-    val CHARGE_THRESHOLDS = setOf(80, 90, 100)
-    val LOW_BATTERY_THRESHOLDS = setOf(20, 15, 10, 5, 1)
+    val CHARGE_THRESHOLDS = (5..100 step 5).toSet()
+    val LOW_BATTERY_THRESHOLDS = (5..100 step 5).toSet() + 1
 
     private val _serviceState = MutableStateFlow(ThresholdTtsServiceState())
     val serviceState: StateFlow<ThresholdTtsServiceState> = _serviceState.asStateFlow()
@@ -122,6 +122,7 @@ class BatteryThresholdTtsService : Service() {
       isCharging: Boolean,
       screenOn: Boolean,
     ) {
+      voiceAssistant.observeBatteryDirection(isCharging, isCharging)
       if (isCharging) {
         voiceAssistant.announceChargingMilestone(
           level = level,

@@ -25,7 +25,9 @@ class AppPowerInspector @Inject constructor(
   private val powerManager: PowerManager? =
     context.getSystemService(Context.POWER_SERVICE) as? PowerManager
 
-  fun hasUsageStatsPermission(): Boolean {
+  fun hasUsageStatsPermission(): Boolean = runCatching { checkUsageStatsPermission() }.getOrDefault(false)
+
+  private fun checkUsageStatsPermission(): Boolean {
     val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager ?: return false
     val mode =
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -45,8 +47,25 @@ class AppPowerInspector @Inject constructor(
     return mode == AppOpsManager.MODE_ALLOWED
   }
 
+  private var cachedApps: List<AppPowerInsight> = emptyList()
+  private var lastQueryElapsed = -1L
+  internal var usageCooldownMillis = 5 * 60_000L
+
+  @Synchronized
   fun collectTopApps(limit: Int = 12): List<AppPowerInsight> {
-    if (!hasUsageStatsPermission()) return emptyList()
+    if (!hasUsageStatsPermission()) {
+      cachedApps = emptyList()
+      lastQueryElapsed = -1L
+      return emptyList()
+    }
+    val now = android.os.SystemClock.elapsedRealtime()
+    if (lastQueryElapsed >= 0L && now - lastQueryElapsed in 0 until usageCooldownMillis) return cachedApps.take(limit.coerceAtLeast(0))
+    lastQueryElapsed = now
+    cachedApps = runCatching { queryTopApps() }.getOrDefault(emptyList())
+    return cachedApps.take(limit.coerceAtLeast(0))
+  }
+
+  private fun queryTopApps(): List<AppPowerInsight> {
     val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
       ?: return emptyList()
 
@@ -62,7 +81,7 @@ class AppPowerInspector @Inject constructor(
         .mapValues { (_, list) -> list.sumOf { it.totalTimeInForeground } }
         .entries
         .sortedByDescending { it.value }
-        .take(limit)
+        .take(12)
 
     val totalForegroundMs = aggregated.sumOf { it.value }.coerceAtLeast(1L)
 

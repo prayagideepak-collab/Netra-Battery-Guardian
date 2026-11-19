@@ -366,7 +366,7 @@ fun BatteryMonitoringDashboardView(
           levelPercent = telemetry.levelPercent,
           isCharging = telemetry.isCharging,
           temperatureCelsius = telemetry.temperatureCelsius,
-          animateRing = true,
+          animateRing = telemetry.levelPercent !in 0..4,
           statusLabel = if (!telemetry.hasLevel) "" else if (telemetry.isCharging) "CHARGING" else "DISCHARGING",
           modifier = Modifier
             .size(152.dp)

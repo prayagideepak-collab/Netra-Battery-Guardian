@@ -16,6 +16,7 @@ import androidx.core.content.ContextCompat
 import com.example.data.local.prefs.PreferencesRepository
 import com.example.data.local.system.AppPowerInspector
 import com.example.data.local.system.BatteryTelemetryCollector
+import com.example.domain.model.allowsUsageInspection
 import com.example.domain.engine.AutomationRulesEngine
 import com.example.domain.engine.ChargingSpeedClassifier
 import dagger.hilt.android.AndroidEntryPoint
@@ -40,9 +41,12 @@ class BatteryGuardianService : Service() {
   @Inject lateinit var appPowerInspector: AppPowerInspector
   @Inject lateinit var rulesEngine: AutomationRulesEngine
   @Inject lateinit var chargingClassifier: ChargingSpeedClassifier
+  @Inject lateinit var adaptivePowerTierEngine: com.example.domain.engine.AdaptivePowerTierEngine
+  @Inject lateinit var dozeModeMonitor: DozeModeMonitor
   @Inject lateinit var preferencesRepository: PreferencesRepository
 
   private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+  private val events = BatteryEventQueue<Intent?>(serviceScope, ::batteryEventKey) { intent, force -> processNow(intent, force) }
   private var receiverRegistered = false
 
   private val systemEventsReceiver =
@@ -132,11 +136,15 @@ class BatteryGuardianService : Service() {
   }
 
   private fun evaluateNow(intentOverride: Intent?, forceSnapshot: Boolean) {
-    serviceScope.launch {
+    events.submit(intentOverride?.let { Intent(it) }, forceSnapshot)
+  }
+
+  private suspend fun processNow(intentOverride: Intent?, forceSnapshot: Boolean) {
       val prefs = preferencesRepository.preferences.first()
       val telemetry = telemetryCollector.collect(intentOverride, prefs.observedCapacityMah)
-      val topApps = appPowerInspector.collectTopApps(limit = 5)
-      val output = rulesEngine.evaluate(telemetry, prefs, topApps, forceSnapshot = forceSnapshot)
+      val budget = adaptivePowerTierEngine.evaluate(telemetry, 0, 0)
+      val topApps = if (!dozeModeMonitor.shouldSkipNonEssentialWork() && budget.allowsUsageInspection()) appPowerInspector.collectTopApps(limit = 5) else emptyList()
+      val output = rulesEngine.evaluate(telemetry, prefs, topApps, forceSnapshot = forceSnapshot, activeTier = budget.activeTier, dbBatchIntervalSeconds = budget.dbBatchIntervalSeconds)
       val diag = chargingClassifier.diagnose(telemetry)
       com.example.widget.GuardianBatteryWidget.publish(this@BatteryGuardianService, telemetry, diag, prefs.appLanguage)
       val statusLine =
@@ -152,7 +160,6 @@ class BatteryGuardianService : Service() {
       } catch (_: SecurityException) {
         // Notifications may be denied/revoked; keep monitoring state local.
       }
-    }
   }
 
   override fun onDestroy() {

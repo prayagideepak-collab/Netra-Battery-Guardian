@@ -59,6 +59,8 @@ class ThermalMonitor @Inject constructor(
   private var receiverRegistered = false
   private var lastAlertTimestampMillis = 0L
   private var lastAlertZone: TemperatureZone? = null
+  private val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+  private var thermalListener: android.os.PowerManager.OnThermalStatusChangedListener? = null
 
   private val batteryChangedReceiver =
     object : BroadcastReceiver() {
@@ -84,6 +86,13 @@ class ThermalMonitor @Inject constructor(
         context.registerReceiver(batteryChangedReceiver, filter)
       }
     receiverRegistered = true
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && thermalListener == null) {
+      val listener = android.os.PowerManager.OnThermalStatusChangedListener {
+        // Read current battery and OS thermal status; do not invent a temperature limit.
+        processBatteryIntent(context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) ?: Intent(Intent.ACTION_BATTERY_CHANGED))
+      }
+      if (runCatching { powerManager?.addThermalStatusListener(context.mainExecutor, listener) }.isSuccess && powerManager != null) thermalListener = listener
+    }
     _state.update { it.copy(isRegistered = true) }
 
     if (sticky != null) {
@@ -97,6 +106,8 @@ class ThermalMonitor @Inject constructor(
     if (activeOwners.isEmpty() && receiverRegistered) {
       runCatching { context.unregisterReceiver(batteryChangedReceiver) }
       receiverRegistered = false
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) thermalListener?.let { runCatching { powerManager?.removeThermalStatusListener(it) } }
+      thermalListener = null
       _state.update { it.copy(isRegistered = false) }
     }
   }

@@ -18,7 +18,7 @@ import javax.inject.Singleton
 @Singleton
 class AdaptivePowerTierEngine @Inject constructor() {
 
-  private var currentTier: AdaptivePowerTier = AdaptivePowerTier.NORMAL
+  private var currentBatteryTier: AdaptivePowerTier = AdaptivePowerTier.NORMAL
   private var thermalLatched: Boolean = false
 
   @Synchronized
@@ -32,15 +32,15 @@ class AdaptivePowerTierEngine @Inject constructor() {
     // Battery % + Charging + OS Battery Saver with 2% hysteresis buffer
     val batteryTier =
       when {
-        !telemetry.hasLevel -> currentTier
+        !telemetry.hasLevel -> currentBatteryTier
         level < 5 -> AdaptivePowerTier.SURVIVAL
-        level <= 6 && currentTier == AdaptivePowerTier.SURVIVAL -> AdaptivePowerTier.SURVIVAL
+        level <= 6 && currentBatteryTier == AdaptivePowerTier.SURVIVAL -> AdaptivePowerTier.SURVIVAL
         telemetry.isCharging && level >= 15 -> AdaptivePowerTier.NORMAL
         level < 15 -> AdaptivePowerTier.CRITICAL
-        level <= 17 && currentTier == AdaptivePowerTier.CRITICAL -> AdaptivePowerTier.CRITICAL
+        level <= 17 && currentBatteryTier == AdaptivePowerTier.CRITICAL -> AdaptivePowerTier.CRITICAL
         telemetry.osBatterySaverOn -> AdaptivePowerTier.SAVER
         level <= 30 -> AdaptivePowerTier.SAVER
-        level <= 32 && currentTier == AdaptivePowerTier.SAVER -> AdaptivePowerTier.SAVER
+        level <= 32 && currentBatteryTier == AdaptivePowerTier.SAVER -> AdaptivePowerTier.SAVER
         else -> AdaptivePowerTier.NORMAL
       }
 
@@ -59,7 +59,7 @@ class AdaptivePowerTierEngine @Inject constructor() {
       telemetry.thermalLevel.ordinal >= ThermalLevel.MODERATE.ordinal ||
         telemetry.healthState == com.example.domain.model.BatteryHealthState.OVERHEAT
     val thermalClearNow =
-      telemetry.thermalLevel == ThermalLevel.NONE &&
+      telemetry.thermalStatusAvailable && telemetry.thermalLevel == ThermalLevel.NONE &&
         telemetry.healthState != com.example.domain.model.BatteryHealthState.OVERHEAT
 
     if (thermalHotNow) thermalLatched = true
@@ -76,7 +76,7 @@ class AdaptivePowerTierEngine @Inject constructor() {
         preThermalTier
       }
 
-    currentTier = finalTier
+    currentBatteryTier = batteryTier
 
     val uiIntervalSec =
       when {

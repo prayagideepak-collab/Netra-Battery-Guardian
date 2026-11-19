@@ -322,7 +322,7 @@ fun HomeScreen(
     item {
       DozeEfficiencyCard(
         metrics = state.dozeEfficiency,
-        isHindi = strings.isHindi,
+        isHindi = state.prefs.appLanguage == com.example.domain.model.AppLanguage.HINDI,
         whyLabel = strings.whyButton,
       )
     }
@@ -408,6 +408,12 @@ fun HomeScreen(
           }
         }
       }
+    }
+    item {
+      com.example.ui.components.ConnectedBluetoothCard(
+        isHindi = state.prefs.appLanguage == com.example.domain.model.AppLanguage.HINDI,
+        measurementsAllowed = state.powerBudget.activeTier == AdaptivePowerTier.NORMAL || state.powerBudget.activeTier == AdaptivePowerTier.SAVER,
+      )
     }
   }
 }

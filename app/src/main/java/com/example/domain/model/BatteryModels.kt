@@ -187,6 +187,7 @@ data class BatteryTelemetry(
   val healthState: BatteryHealthState = BatteryHealthState.UNKNOWN,
   val technology: String = "Unavailable",
   val thermalLevel: ThermalLevel = ThermalLevel.NONE,
+  val thermalStatusAvailable: Boolean = true,
   val osBatterySaverOn: Boolean = false,
   val screenOn: Boolean = true,
   val screenBrightnessPercent: Int = -1,
@@ -325,3 +326,9 @@ data class PowerBudgetMetrics(
   val dbBatchIntervalSeconds: Int = 60,
   val suspendedFeatures: List<String> = emptyList(),
 )
+
+/** Enforced work gates, separate from user-facing descriptions. Safety alerts are never gated. */
+fun PowerBudgetMetrics.allowsUsageInspection(): Boolean =
+  activeTier == AdaptivePowerTier.NORMAL || activeTier == AdaptivePowerTier.SAVER
+
+fun PowerBudgetMetrics.allowsRoutineVoice(): Boolean = allowsUsageInspection()

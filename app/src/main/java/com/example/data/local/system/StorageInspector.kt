@@ -19,7 +19,13 @@ import javax.inject.Singleton
 class StorageInspector @Inject constructor(
   @ApplicationContext private val context: Context,
 ) {
-  fun inspect(temperatureCelsius: Float, batteryPercent: Int): StorageInsight {
+  private var measuredCacheBytes = -1L
+  private var lastScanElapsed = -1L
+  internal var scanCooldownMillis = 15 * 60_000L
+
+  @Synchronized
+  fun inspect(temperatureCelsius: Float, batteryPercent: Int, allowDirectoryScan: Boolean = true,
+    shouldContinue: () -> Boolean = { true }): StorageInsight {
     val statFs = StatFs(Environment.getDataDirectory().path)
     val totalBytes = statFs.totalBytes
     if (totalBytes <= 0L) return StorageInsight(0L, 0L, 0L, 0f, 0L, 0L)
@@ -40,11 +46,17 @@ class StorageInspector @Inject constructor(
       }
 
     // The chart total is /data. Do not attribute an external/SD cache to that filesystem.
-    val ownCacheBytes = directorySize(context.cacheDir)
+    val elapsed = android.os.SystemClock.elapsedRealtime()
+    val scanDue = lastScanElapsed < 0L || elapsed - lastScanElapsed !in 0 until scanCooldownMillis
+    if (allowDirectoryScan && postponeReason == null && temperatureCelsius.isFinite() && batteryPercent in 15..100 && scanDue && shouldContinue()) {
+      val observed = runCatching { directorySize(context.cacheDir, shouldContinue) }.getOrNull()
+      if (observed != null) { measuredCacheBytes = observed; lastScanElapsed = elapsed }
+    }
+    val ownCacheBytes = measuredCacheBytes
 
     val recommendations = mutableListOf<StorageRecommendation>()
 
-    val ownCacheMb = (ownCacheBytes / (1024 * 1024)).toInt()
+    val ownCacheMb = if (ownCacheBytes >= 0L) (ownCacheBytes / (1024 * 1024)).toInt() else -1
     recommendations +=
       StorageRecommendation(
         id = "app_own_cache",
@@ -54,7 +66,7 @@ class StorageInspector @Inject constructor(
         descriptionHi = "तुरंत साफ़ करने के लिए सुरक्षित। नेत्रा केवल अपनी अस्थायी कैश फ़ाइलें ही हटाता है।",
         whyEn = "Auto-cleans when exceeding 100 MB; never touches your photos, videos, or downloads.",
         whyHi = "100 MB से अधिक होने पर स्वतः साफ़ होता है; आपकी फ़ोटो, वीडियो या डाउनलोड कभी नहीं छूता।",
-        estimatedReclaimableMb = ownCacheMb.coerceAtLeast(0),
+        estimatedReclaimableMb = ownCacheMb,
         target = StorageActionTarget.APP_OWN_CACHE,
       )
 
@@ -152,14 +164,20 @@ class StorageInspector @Inject constructor(
   /**
    * Safely cleans ONLY Netra's own internal and external cache directories.
    */
-  fun cleanOwnCache(): Long {
-    val before =
-      directorySize(context.cacheDir) + (context.externalCacheDir?.let { directorySize(it) } ?: 0L)
-    deleteChildren(context.cacheDir)
-    context.externalCacheDir?.let { deleteChildren(it) }
-    val after =
-      directorySize(context.cacheDir) + (context.externalCacheDir?.let { directorySize(it) } ?: 0L)
-    return (before - after).coerceAtLeast(0L)
+  @Synchronized
+  fun cleanOwnCache(shouldContinue: () -> Boolean = { true }): Long {
+    var freed = 0L
+    for (root in listOfNotNull(context.cacheDir, context.externalCacheDir)) {
+      if (!shouldContinue()) break
+      if (File(root.parentFile.canonicalFile, root.name) != root.canonicalFile) continue
+      val before = runCatching { directorySize(root, shouldContinue) }.getOrNull() ?: continue
+      runCatching { deleteChildren(root, root.canonicalFile, shouldContinue) }
+      val after = runCatching { directorySize(root, shouldContinue) }.getOrNull() ?: continue
+      freed += (before - after).coerceAtLeast(0L)
+    }
+    measuredCacheBytes = -1L
+    lastScanElapsed = -1L
+    return freed
   }
 
   fun buildSettingsIntentForTarget(target: StorageActionTarget, packageHint: String?): Intent {
@@ -205,26 +223,42 @@ class StorageInspector @Inject constructor(
     return null
   }
 
-  private fun directorySize(dir: File?): Long {
+  private fun safeChild(file: File, root: File): Boolean =
+    file.absoluteFile == file.canonicalFile && file.canonicalPath.startsWith(root.path + File.separator)
+
+  private fun directorySize(dir: File?, shouldContinue: () -> Boolean = { true }): Long {
     if (dir == null || !dir.exists()) return 0L
-    if (dir.isFile) return dir.length()
-    var sum = 0L
-    dir.listFiles()?.forEach { child ->
-      sum += if (child.isDirectory) directorySize(child) else child.length()
+    check(File(dir.parentFile.canonicalFile, dir.name) == dir.canonicalFile) { "Cache root is a link" }
+    val root = dir.canonicalFile
+    fun size(file: File, depth: Int): Long {
+      check(shouldContinue()) { "Scan deferred" }
+      check(depth <= 64) { "Directory too deep" }
+      if (file != root && !safeChild(file, root)) return 0L
+      if (file.isFile) return file.length()
+      return (file.listFiles() ?: error("Directory unavailable")).sumOf { size(it, depth + 1) }
     }
-    return sum
+    return size(root, 0)
   }
 
-  private fun deleteChildren(dir: File?) {
-    if (dir == null || !dir.exists()) return
-    dir.listFiles()?.forEach { child ->
-      if (child.isDirectory) child.deleteRecursively()
-      else child.delete()
+  private fun deleteChildren(dir: File, root: File, shouldContinue: () -> Boolean, depth: Int = 0) {
+    check(shouldContinue()) { "Cleanup deferred" }
+    check(depth <= 64) { "Directory too deep" }
+    for (child in dir.listFiles() ?: error("Directory unavailable")) {
+      check(shouldContinue()) { "Cleanup deferred" }
+      if (!safeChild(child, root)) continue // Never follow links out of own cache.
+      if (child.isDirectory) deleteChildren(child, root, shouldContinue, depth + 1)
+      child.delete() // A failed delete remains present and cannot count as freed bytes.
     }
   }
 
   companion object {
+    fun maintenanceAllowed(t: com.example.domain.model.BatteryTelemetry): Boolean =
+      t.hasLevel && t.levelPercent >= 15 && t.hasTemperature && t.temperatureCelsius < 40f &&
+        t.healthState != com.example.domain.model.BatteryHealthState.OVERHEAT &&
+        t.thermalLevel.ordinal < com.example.domain.model.ThermalLevel.MODERATE.ordinal
+
     fun formatBytes(bytes: Long): String {
+      if (bytes < 0L) return ""
       val kb = 1024.0
       val mb = kb * 1024
       val gb = mb * 1024

@@ -71,11 +71,13 @@ class DiskUsageHelper @Inject constructor(
    * maintenance window (either invoked from an idle-constrained WorkManager job or when
    * [PowerManager.isDeviceIdleMode] / screen-off idle is active) and while battery/temperature are safe.
    */
+  @Synchronized
   fun scanAppStorageIfIdle(
     fromIdleWorker: Boolean = false,
-    temperatureCelsius: Float = 30f,
-    batteryPercent: Int = 50,
+    temperatureCelsius: Float = Float.NaN,
+    batteryPercent: Int = -1,
     heavyFileThresholdBytes: Long = DEFAULT_HEAVY_FILE_THRESHOLD_BYTES,
+    shouldContinue: () -> Boolean = { true },
   ): DiskUsageReport {
     val now = System.currentTimeMillis()
     if (!fromIdleWorker && !isDeviceIdleForMaintenance()) {
@@ -86,7 +88,7 @@ class DiskUsageHelper @Inject constructor(
       )
     }
 
-    if (temperatureCelsius >= 40f || batteryPercent < 15) {
+    if (!temperatureCelsius.isFinite() || temperatureCelsius >= 40f || batteryPercent !in 15..100 || !shouldContinue()) {
       return DiskUsageReport(
         scannedAtMillis = now,
         executedDuringIdleWindow = false,
@@ -129,6 +131,7 @@ class DiskUsageHelper @Inject constructor(
             .filter { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 }
             .take(25)
             .forEach { appInfo ->
+              if (!shouldContinue()) return DiskUsageReport(now, false, "Deferred: device conditions changed")
               val pkgStats = runCatching {
                 ssm.queryStatsForPackage(StorageManager.UUID_DEFAULT, appInfo.packageName, user)
               }.getOrNull()
@@ -148,16 +151,18 @@ class DiskUsageHelper @Inject constructor(
       }
     }
 
+    if (!shouldContinue()) return DiskUsageReport(now, false, "Deferred: device conditions changed")
     val heavyFiles = mutableListOf<HeavyAppFile>()
-    collectHeavyFiles(context.filesDir, "files", heavyFileThresholdBytes, heavyFiles)
-    collectHeavyFiles(context.cacheDir, "cache", heavyFileThresholdBytes, heavyFiles)
+    collectHeavyFiles(context.filesDir, "files", heavyFileThresholdBytes, heavyFiles, shouldContinue = shouldContinue)
+    collectHeavyFiles(context.cacheDir, "cache", heavyFileThresholdBytes, heavyFiles, shouldContinue = shouldContinue)
     context.getExternalFilesDir(null)?.let {
-      collectHeavyFiles(it, "external_files", heavyFileThresholdBytes, heavyFiles)
+      collectHeavyFiles(it, "external_files", heavyFileThresholdBytes, heavyFiles, shouldContinue = shouldContinue)
     }
     context.externalCacheDir?.let {
-      collectHeavyFiles(it, "external_cache", heavyFileThresholdBytes, heavyFiles)
+      collectHeavyFiles(it, "external_cache", heavyFileThresholdBytes, heavyFiles, shouldContinue = shouldContinue)
     }
 
+    if (!shouldContinue()) return DiskUsageReport(now, false, "Deferred: device conditions changed")
     val report = DiskUsageReport(
       scannedAtMillis = now,
       executedDuringIdleWindow = true,
@@ -178,8 +183,10 @@ class DiskUsageHelper @Inject constructor(
     thresholdBytes: Long,
     out: MutableList<HeavyAppFile>,
     depth: Int = 0,
+    shouldContinue: () -> Boolean = { true },
   ) {
-    if (root == null || !root.exists() || depth > 4) return
+    if (root == null || !root.exists() || depth > 4 || !shouldContinue()) return
+    if (runCatching { File(root.parentFile.canonicalFile, root.name) != root.canonicalFile }.getOrDefault(true)) return
     if (root.isFile) {
       val len = root.length()
       if (len >= thresholdBytes) {
@@ -193,7 +200,7 @@ class DiskUsageHelper @Inject constructor(
       return
     }
     root.listFiles()?.forEach { child ->
-      collectHeavyFiles(child, kind, thresholdBytes, out, depth + 1)
+      collectHeavyFiles(child, kind, thresholdBytes, out, depth + 1, shouldContinue)
     }
   }
 

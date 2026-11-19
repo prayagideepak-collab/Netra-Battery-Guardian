@@ -91,12 +91,14 @@ fun AnimatedBatteryRing(
   modifier: Modifier = Modifier,
 ) {
   val targetSweep = (levelPercent.coerceIn(0, 100) / 100f) * 360f
-  val animatedSweep by animateFloatAsState(
-    targetValue = targetSweep,
-    animationSpec = spring(stiffness = Spring.StiffnessLow),
-    label = "battery_sweep",
-  )
-  val sweepAngle = if (animateRing) animatedSweep else targetSweep
+  val sweepAngle = if (animateRing) {
+    val animatedSweep by animateFloatAsState(
+      targetValue = targetSweep,
+      animationSpec = spring(stiffness = Spring.StiffnessLow),
+      label = "battery_sweep",
+    )
+    animatedSweep
+  } else targetSweep
 
   val ringColor =
     when {

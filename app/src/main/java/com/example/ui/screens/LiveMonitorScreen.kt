@@ -358,7 +358,7 @@ fun LiveMonitorContent(
               levelPercent = serviceState.levelPercent,
               isCharging = serviceState.isCharging,
               temperatureCelsius = serviceState.temperatureCelsius,
-              animateRing = true,
+              animateRing = serviceState.levelPercent !in 0..4,
               statusLabel = serviceState.chargingStatus,
               modifier = Modifier
                 .size(164.dp)
