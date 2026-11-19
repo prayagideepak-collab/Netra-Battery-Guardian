@@ -74,12 +74,13 @@ class UltraLowPowerComplianceTest {
 
     // Thermal restriction uses supported OS status, not a battery-temperature safety claim.
     val hot = normal.copy(levelPercent = 80, isCharging = false, temperatureCelsius = 41f, thermalLevel = ThermalLevel.MODERATE)
-    assertEquals(AdaptivePowerTier.SAVER, engine.evaluate(hot, 0, 1).activeTier)
+    val thermalEngine = AdaptivePowerTierEngine()
+    assertEquals(AdaptivePowerTier.SAVER, thermalEngine.evaluate(hot, 0, 1, 0).activeTier)
     val still39 = hot.copy(temperatureCelsius = 39f, thermalLevel = ThermalLevel.LIGHT)
-    assertTrue(engine.evaluate(still39, 0, 1).isThermalThrottled)
+    assertTrue(thermalEngine.evaluate(still39, 0, 1, 1).isThermalThrottled)
     val cooled37 = hot.copy(temperatureCelsius = 37f, thermalLevel = ThermalLevel.NONE)
-    assertTrue(engine.evaluate(cooled37, 0, 1, 1_000_000).isThermalThrottled)
-    assertFalse(engine.evaluate(cooled37, 0, 1, 1_030_000).isThermalThrottled)
+    assertTrue(thermalEngine.evaluate(cooled37, 0, 1, 1_000_000).isThermalThrottled)
+    assertFalse(thermalEngine.evaluate(cooled37, 0, 1, 1_030_000).isThermalThrottled)
   }
 
   @Test
