@@ -91,7 +91,7 @@ fun AnimatedBatteryRing(
   modifier: Modifier = Modifier,
 ) {
   val targetSweep = (levelPercent.coerceIn(0, 100) / 100f) * 360f
-  val sweepAngle = if (animateRing) {
+  val sweepAngle = if (animateRing && com.example.domain.engine.MeasuredPowerBudget.permits(com.example.domain.model.PowerFeature.ANIMATION)) {
     val animatedSweep by animateFloatAsState(
       targetValue = targetSweep,
       animationSpec = spring(stiffness = Spring.StiffnessLow),
