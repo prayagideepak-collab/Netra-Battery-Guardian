@@ -35,9 +35,16 @@ internal class EnergyCounterSpeedPolicy {
     }
     // Interpolate only the oldest partial interval of the observed 10-second window.
     val first = points.first(); val second = points.elementAt(1)
-    val firstEnergy = first.energy.toDouble() +
-      (second.energy - first.energy).toDouble() * (lower - first.time).toDouble() / (second.time - first.time).toDouble()
-    val watts = (energyNwh.toDouble() - firstEnergy) * 0.0036 / WINDOW_MILLIS
+    // Subtract integer counters before division. Decimal rational arithmetic avoids
+    // losing a boundary (for example exact 5 W) to cancellation of large counters.
+    val interval = java.math.BigDecimal.valueOf(second.time - first.time)
+    val delta = java.math.BigDecimal.valueOf(energyNwh).subtract(java.math.BigDecimal.valueOf(first.energy))
+    val partial = java.math.BigDecimal.valueOf(second.energy).subtract(java.math.BigDecimal.valueOf(first.energy))
+      .multiply(java.math.BigDecimal.valueOf(lower - first.time))
+    val watts = delta.multiply(interval).subtract(partial)
+      .multiply(java.math.BigDecimal("0.0036"))
+      .divide(interval.multiply(java.math.BigDecimal.valueOf(WINDOW_MILLIS)), java.math.MathContext.DECIMAL128)
+      .toDouble()
     val observed = classify(watts)
     if (observed == null) {
       reset(); return lastReading

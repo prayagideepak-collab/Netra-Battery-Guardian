@@ -12,6 +12,17 @@ class EnergyCounterSpeedPolicyTest {
     cases.forEach { (watts, expected) -> assertEquals(expected, EnergyCounterSpeedPolicy.classify(watts)) }
     listOf(0.0, -1.0, Double.NaN, Double.POSITIVE_INFINITY).forEach { assertNull(EnergyCounterSpeedPolicy.classify(it)) }
   }
+  @Test fun exactThresholdsSurviveLargeCountersAndPartialWindowInterpolation() {
+    val cases=listOf(5L to EnergySpeed.NORMAL,10L to EnergySpeed.FAST,20L to EnergySpeed.ULTRA_FAST,
+      50L to EnergySpeed.HYPER_FAST,100L to EnergySpeed.EXTREME_FAST)
+    for((watts,expected) in cases) {
+      val p=EnergyCounterSpeedPolicy()
+      var result=EnergySpeedReading()
+      for(i in 0L..7L) result=p.observe(true,1_000_000_000L+watts*1_000_000L*i,i*3600)
+      assertEquals(expected,result.speed)
+      assertEquals(watts.toDouble(),result.watts!!,0.0000001)
+    }
+  }
   @Test fun requiresObservedAverageThenTenSecondsOfStableCategory() {
     val p = EnergyCounterSpeedPolicy()
     for (second in 0L..19L) assertNull(p.observe(true, 1_000_000_000L + second * 2_500_000L, second * 1000).speed)
