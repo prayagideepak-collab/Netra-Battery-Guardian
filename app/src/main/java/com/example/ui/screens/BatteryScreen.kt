@@ -209,11 +209,6 @@ fun BatteryScreen(
 
     // Long-Term Battery Cycle Count & Capacity Degradation (Logged Daily While Charging)
     item {
-      val latestHealth = state.batteryHealthLogs.firstOrNull { it.sourceLabel.startsWith("OBSERVED_V2") }
-      val cycles = t.chargeCycleCount?.toFloat() ?: latestHealth?.estimatedCycleCount ?: -1f
-      val cyclesText = if (cycles >= 0) cycles.toInt().toString() else ""
-      val estMah = t.estimatedCapacityMah
-
       GuardianCard(modifier = Modifier.widthIn(max = 720.dp).testTag("battery_cycle_health_card")) {
         Row(
           modifier = Modifier.fillMaxWidth(),
@@ -226,21 +221,7 @@ fun BatteryScreen(
             modifier = Modifier.weight(1f),
           )
         }
-        Text(
-          text = listOfNotNull(cyclesText.takeIf { it.isNotBlank() }?.let { "OS Cycles: $it" }, capacityText(estMah).takeIf { it.isNotBlank() }).joinToString(" • "),
-          style = TelemetryMonoStyle,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-          text = if (latestHealth != null) {
-            "Observed OS cycles/counter only. Design capacity, wear and health: Unavailable."
-          } else {
-            if (strings.isHindi) "चार्जिंग के दौरान प्रतिदिन एक बार चक्र और क्षमता लॉग की जाती है।"
-            else "Design capacity, wear and health are unavailable without a verified baseline."
-          },
-          style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        com.example.ui.components.BatteryHealthObservationContent(t, strings.isHindi)
         Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.spacedBy(8.dp),

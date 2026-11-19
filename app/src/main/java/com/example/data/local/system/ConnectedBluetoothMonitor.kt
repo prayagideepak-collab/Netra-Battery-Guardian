@@ -41,11 +41,15 @@ class ConnectedBluetoothMonitor(private val context: Context) {
   private val proxies = mutableMapOf<Int, BluetoothProfile>()
   private var closed = false
   private var generation = 0
+  private var readGeneration = 0
+  var lastReadDeferred: Boolean = false
+    private set
 
   fun permitted(): Boolean = Build.VERSION.SDK_INT < 31 || ContextCompat.checkSelfPermission(
     context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
 
   fun refresh() {
+    readGeneration++
     generation++
     val requestGeneration = generation
     _devices.value = emptyList()
@@ -81,6 +85,10 @@ class ConnectedBluetoothMonitor(private val context: Context) {
   }
 
   fun read(id: String) {
+    lastReadDeferred = !com.example.domain.engine.MeasuredPowerBudget.permits(com.example.domain.model.PowerFeature.CONNECTED_ACCESSORY_READ)
+    if (lastReadDeferred) return
+    readGeneration++
+    val thisReadGeneration = readGeneration
     if (closed || !permitted() || _devices.value.none { it.id == id && it.supportsGatt }) return
     closeConnections()
     _devices.value = _devices.value.map { if (it.id == id) it.copy(rssi = null, batteryPercent = null, measuredAtMillis = null) else it }
@@ -134,7 +142,7 @@ class ConnectedBluetoothMonitor(private val context: Context) {
     clients.add(client)
     handler.postDelayed({ finish(client) }, 12_000L)
     // Clear old samples rather than displaying them as a live signal.
-    handler.postDelayed({ update(id) { it.copy(rssi = null, batteryPercent = null, measuredAtMillis = null) } }, 30_000L)
+    handler.postDelayed({ if (thisReadGeneration == readGeneration) update(id) { it.copy(rssi = null, batteryPercent = null, measuredAtMillis = null) } }, 30_000L)
   }
 
   private fun update(id: String, change: (BluetoothReading) -> BluetoothReading) {
@@ -147,6 +155,7 @@ class ConnectedBluetoothMonitor(private val context: Context) {
   }
   private fun closeConnections() { clients.toList().forEach(::finish) }
   fun pause() {
+    readGeneration++
     generation++
     handler.removeCallbacksAndMessages(null)
     closeConnections()
