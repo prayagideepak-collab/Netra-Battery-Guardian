@@ -42,7 +42,7 @@ class HealthBluetoothCompletionTest {
   @Test fun integratedUnknownHealthStaysUnavailable() {
     rule.setContent { NetraBatteryTheme { Surface { BatteryScreen(NetraUiState(), AppStrings(AppLanguage.ENGLISH)) } } }
     rule.onNodeWithTag("battery_screen_list").performScrollToNode(hasTestTag("observed_health_percentage"))
-    rule.onNodeWithTag("observed_health_category").assertTextContains("Unavailable")
+    rule.onNodeWithTag("observed_health_category").assertTextEquals("Android health category: Unavailable")
     rule.onNodeWithTag("observed_health_percentage").assertTextEquals("Battery health %: Unavailable")
     capture("health-observations-unknown")
   }
@@ -53,7 +53,7 @@ class HealthBluetoothCompletionTest {
       Text("स्वचालित स्क्रीन परीक्षण, फ़ोन का माप नहीं")
       GuardianCard { BatteryHealthObservationContent(t,true) }
     } } } }
-    rule.onNodeWithTag("observed_health_percentage").assertTextContains("Unavailable")
+    rule.onNodeWithTag("observed_health_percentage").assertTextEquals("बैटरी स्वास्थ्य %: Unavailable")
     rule.onNodeWithText("OS चक्र गणना: 112").assertExists()
     rule.onAllNodesWithText("100%",substring=true).assertCountEquals(0)
     capture("health-observations-hindi")
